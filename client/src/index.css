@@ -138,11 +138,11 @@
 
   --border: 222 10% 20%;
 
-  --card: 222 15% 11%;
+  --card: 222 15% 14%;
 
   --card-foreground: 210 20% 98%;
 
-  --card-border: 222 10% 22%;
+  --card-border: 222 10% 24%;
 
   --sidebar: 222 15% 8%;
 
@@ -176,7 +176,7 @@
 
   --muted: 222 12% 16%;
 
-  --muted-foreground: 215 16% 75%;
+  --muted-foreground: 215 16% 65%;
 
   --accent: 222 12% 14%;
 
@@ -185,6 +185,15 @@
   --destructive: 0 84% 60%;
 
   --destructive-foreground: 210 20% 98%;
+  
+  --success: 142 76% 36%;
+  --success-foreground: 210 20% 98%;
+  
+  --warning: 38 92% 50%;
+  --warning-foreground: 222 15% 10%;
+  
+  --ai-accent: 271 76% 53%;
+  --ai-accent-foreground: 210 20% 98%;
 
   --input: 222 10% 30%;
   --ring: 217 91% 60%;

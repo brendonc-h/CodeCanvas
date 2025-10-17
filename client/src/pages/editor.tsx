@@ -1,0 +1,345 @@
+import { useState, useEffect } from "react"
+import { useParams, useLocation } from "wouter"
+import { useQuery, useMutation } from "@tanstack/react-query"
+import {
+  Play,
+  Square,
+  Package,
+  Rocket,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Settings,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
+import { apiRequest, queryClient } from "@/lib/queryClient"
+import { FileTree } from "@/components/editor/file-tree"
+import { MonacoEditor } from "@/components/editor/monaco-editor"
+import { Terminal } from "@/components/editor/terminal"
+import { AiPanel } from "@/components/editor/ai-panel"
+import { ThemeToggle } from "@/components/theme-toggle"
+import type { Project, File } from "@shared/schema"
+
+export default function Editor() {
+  const { id } = useParams<{ id: string }>()
+  const [, navigate] = useLocation()
+  const { toast } = useToast()
+  
+  const [activeFile, setActiveFile] = useState<string | null>(null)
+  const [editorContent, setEditorContent] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
+  const [deployDialogOpen, setDeployDialogOpen] = useState(false)
+  const [siteId, setSiteId] = useState('')
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  const { data: project } = useQuery<Project>({
+    queryKey: ['/api/projects', id],
+  })
+
+  const { data: files = [], isLoading: filesLoading } = useQuery<File[]>({
+    queryKey: ['/api/projects', id, 'files'],
+  })
+
+  const activeFileData = files.find(f => f.path === activeFile)
+
+  useEffect(() => {
+    if (activeFileData) {
+      setEditorContent(activeFileData.content)
+      setHasUnsavedChanges(false)
+    }
+  }, [activeFile, activeFileData])
+
+  const saveFileMutation = useMutation({
+    mutationFn: async (data: { path: string; content: string }) => {
+      return apiRequest('PUT', `/api/projects/${id}/files`, data)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', id, 'files'] })
+      setHasUnsavedChanges(false)
+      toast({ title: "File saved" })
+    },
+  })
+
+  const createFileMutation = useMutation({
+    mutationFn: async (path: string) => {
+      return apiRequest('POST', `/api/projects/${id}/files`, { path, content: '' })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', id, 'files'] })
+      toast({ title: "File created" })
+    },
+  })
+
+  const deleteFileMutation = useMutation({
+    mutationFn: async (path: string) => {
+      return apiRequest('DELETE', `/api/projects/${id}/files`, { path })
+    },
+    onSuccess: (_, deletedPath) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', id, 'files'] })
+      if (activeFile === deletedPath) setActiveFile(null)
+      toast({ title: "File deleted" })
+    },
+  })
+
+  const runCommandMutation = useMutation({
+    mutationFn: async (command: string[]) => {
+      return apiRequest('POST', '/api/runs', { projectId: id, command })
+    },
+    onSuccess: () => {
+      toast({ title: "Command started" })
+    },
+  })
+
+  const deployMutation = useMutation({
+    mutationFn: async (data: { siteId?: string }) => {
+      return apiRequest('POST', '/api/deploy/netlify', {
+        projectId: id,
+        siteId: data.siteId || undefined,
+      })
+    },
+    onSuccess: (data: any) => {
+      setDeployDialogOpen(false)
+      toast({
+        title: "Deployment started",
+        description: data.deployUrl ? `URL: ${data.deployUrl}` : "Building...",
+      })
+    },
+  })
+
+  const handleEditorChange = (value: string | undefined) => {
+    setEditorContent(value || '')
+    setHasUnsavedChanges(true)
+  }
+
+  const handleSaveFile = () => {
+    if (activeFile && hasUnsavedChanges) {
+      saveFileMutation.mutate({ path: activeFile, content: editorContent })
+    }
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSaveFile()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeFile, editorContent, hasUnsavedChanges])
+
+  const getLanguage = (path: string) => {
+    const ext = path.split('.').pop()
+    const langMap: Record<string, string> = {
+      ts: 'typescript',
+      tsx: 'typescript',
+      js: 'javascript',
+      jsx: 'javascript',
+      json: 'json',
+      css: 'css',
+      html: 'html',
+      md: 'markdown',
+    }
+    return langMap[ext || ''] || 'plaintext'
+  }
+
+  if (!id) return null
+
+  return (
+    <div className="h-screen flex flex-col bg-background">
+      {/* Top Bar */}
+      <header className="h-14 border-b border-border bg-sidebar flex items-center justify-between px-4">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/')}
+            data-testid="button-back"
+            aria-label="Back to dashboard"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-sm font-semibold" data-testid="text-project-name">
+              {project?.name || 'Loading...'}
+            </h1>
+            {activeFile && (
+              <p className="text-xs text-muted-foreground font-mono" data-testid="text-active-file">
+                {activeFile}
+                {hasUnsavedChanges && ' •'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runCommandMutation.mutate(['npm', 'ci'])}
+            disabled={runCommandMutation.isPending}
+            data-testid="button-install"
+          >
+            <Package className="h-4 w-4 mr-2" />
+            Install
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runCommandMutation.mutate(['npm', 'run', 'dev'])}
+            disabled={runCommandMutation.isPending}
+            data-testid="button-dev"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Dev
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => runCommandMutation.mutate(['npm', 'run', 'build'])}
+            disabled={runCommandMutation.isPending}
+            data-testid="button-build"
+          >
+            <Square className="h-4 w-4 mr-2" />
+            Build
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDeployDialogOpen(true)}
+            data-testid="button-deploy"
+          >
+            <Rocket className="h-4 w-4 mr-2" />
+            Deploy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowPreview(!showPreview)}
+            data-testid="button-toggle-preview"
+          >
+            {showPreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+            Preview
+          </Button>
+          <ThemeToggle />
+        </div>
+      </header>
+
+      {/* Main Editor Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* File Tree */}
+        <div className="w-64 flex-shrink-0">
+          {!filesLoading && (
+            <FileTree
+              files={files}
+              activeFile={activeFile}
+              onFileSelect={setActiveFile}
+              onFileCreate={(path) => createFileMutation.mutate(path)}
+              onFileDelete={(path) => deleteFileMutation.mutate(path)}
+            />
+          )}
+        </div>
+
+        {/* Editor & Terminal */}
+        <div className="flex-1 flex flex-col">
+          {/* Monaco Editor */}
+          <div className="flex-1 bg-background">
+            {activeFile ? (
+              <MonacoEditor
+                value={editorContent}
+                onChange={handleEditorChange}
+                language={getLanguage(activeFile)}
+                path={activeFile}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Settings className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                  <p data-testid="text-no-file">Select a file to start editing</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Terminal */}
+          <div className="h-64 border-t border-border">
+            <Terminal projectId={id} />
+          </div>
+        </div>
+
+        {/* AI Panel */}
+        <AiPanel
+          projectId={id}
+          currentFile={activeFile}
+          currentContent={editorContent}
+          onApplyPatch={(content) => {
+            setEditorContent(content)
+            setHasUnsavedChanges(true)
+            toast({ title: "Patch applied", description: "Don't forget to save!" })
+          }}
+        />
+
+        {/* Preview Panel */}
+        {showPreview && (
+          <div className="w-96 border-l border-border bg-card">
+            <div className="h-10 border-b border-border bg-sidebar flex items-center px-3">
+              <h3 className="text-sm font-semibold" data-testid="text-preview">Preview</h3>
+            </div>
+            <iframe
+              src={`/preview/${id}`}
+              className="w-full h-full"
+              title="Preview"
+              data-testid="iframe-preview"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Deploy Dialog */}
+      <Dialog open={deployDialogOpen} onOpenChange={setDeployDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deploy to Netlify</DialogTitle>
+            <DialogDescription>
+              Deploy your project to Netlify. Optionally provide a site ID to update an existing site.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="siteId">Netlify Site ID (optional)</Label>
+              <Input
+                id="siteId"
+                placeholder="your-site-id"
+                value={siteId}
+                onChange={(e) => setSiteId(e.target.value)}
+                data-testid="input-site-id"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setDeployDialogOpen(false)} data-testid="button-cancel-deploy">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => deployMutation.mutate({ siteId })}
+              disabled={deployMutation.isPending}
+              data-testid="button-confirm-deploy"
+            >
+              {deployMutation.isPending ? 'Deploying...' : 'Deploy'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
