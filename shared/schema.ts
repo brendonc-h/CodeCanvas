@@ -108,6 +108,7 @@ export const deployments = pgTable("deployments", {
   deployUrl: text("deploy_url"), // Deployed URL
   status: text("status").notNull(), // 'pending' | 'building' | 'success' | 'failed'
   buildLog: text("build_log"),
+  fileSnapshot: text("file_snapshot"), // JSON string of files at deployment time
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

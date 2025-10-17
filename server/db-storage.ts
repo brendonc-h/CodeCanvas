@@ -188,7 +188,16 @@ export class DbStorage implements IStorage {
   }
 
   async getDeploymentsByProjectId(projectId: string): Promise<Deployment[]> {
-    return db.select().from(deployments).where(eq(deployments.projectId, projectId));
+    return db
+      .select()
+      .from(deployments)
+      .where(eq(deployments.projectId, projectId))
+      .orderBy(deployments.createdAt);
+  }
+
+  async getDeployment(id: string): Promise<Deployment | null> {
+    const result = await db.select().from(deployments).where(eq(deployments.id, id));
+    return result[0] || null;
   }
 
   async updateDeployment(id: string, data: Partial<Deployment>): Promise<Deployment> {

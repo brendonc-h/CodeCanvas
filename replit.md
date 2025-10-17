@@ -8,6 +8,21 @@ A production-grade web-based IDE that provides users with isolated Docker sandbo
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+- **Deployment History & Rollback** (October 17, 2025)
+  - Added deployment history UI with status badges, timestamps, and URLs
+  - Implemented rollback functionality to redeploy previous successful deployments
+  - Added real-time polling of deployment status updates (5-second interval)
+  - Created GET /api/projects/:id/deployments and POST /api/deploy/rollback endpoints
+
+- **Authentication & Authorization** (October 17, 2025)
+  - Migrated from in-memory storage to PostgreSQL database with Drizzle ORM
+  - Implemented session-based authentication with bcrypt password hashing
+  - Added authorization checks across all API endpoints (project, file, run, AI, deploy, preview)
+  - Secured WebSocket terminal with session-based authentication during upgrade handshake
+  - Created login/signup UI with protected routes via AuthCheck wrapper
+
 ## System Architecture
 
 ### Frontend Architecture

@@ -10,8 +10,10 @@ import {
   Eye,
   EyeOff,
   Settings,
+  History,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -39,6 +41,7 @@ export default function Editor() {
   const [editorContent, setEditorContent] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [deployDialogOpen, setDeployDialogOpen] = useState(false)
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [siteId, setSiteId] = useState('')
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -109,9 +112,29 @@ export default function Editor() {
     },
     onSuccess: (data: any) => {
       setDeployDialogOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', id, 'deployments'] })
       toast({
         title: "Deployment started",
         description: data.deployUrl ? `URL: ${data.deployUrl}` : "Building...",
+      })
+    },
+  })
+
+  const { data: deployments = [] } = useQuery({
+    queryKey: ['/api/projects', id, 'deployments'],
+    refetchInterval: 5000, // Poll every 5s for deployment status updates
+  })
+
+  const rollbackMutation = useMutation({
+    mutationFn: async (deploymentId: string) => {
+      return apiRequest('POST', '/api/deploy/rollback', { deploymentId })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', id, 'deployments'] })
+      setHistoryDialogOpen(false)
+      toast({
+        title: "Rollback started",
+        description: "Redeploying previous version...",
       })
     },
   })
@@ -221,6 +244,15 @@ export default function Editor() {
           >
             <Rocket className="h-4 w-4 mr-2" />
             Deploy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setHistoryDialogOpen(true)}
+            data-testid="button-history"
+          >
+            <History className="h-4 w-4 mr-2" />
+            History
           </Button>
           <Button
             variant="outline"
@@ -337,6 +369,80 @@ export default function Editor() {
             >
               {deployMutation.isPending ? 'Deploying...' : 'Deploy'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deployment History Dialog */}
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Deployment History</DialogTitle>
+            <DialogDescription>
+              View all deployments for this project. Click rollback to redeploy a previous version.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {deployments.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-no-deployments">
+                No deployments yet. Click Deploy to create your first deployment.
+              </p>
+            ) : (
+              deployments.map((deployment: any) => (
+                <div
+                  key={deployment.id}
+                  className="border border-border rounded-md p-4 space-y-2"
+                  data-testid={`deployment-${deployment.id}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge
+                          variant={
+                            deployment.status === 'success' ? 'default' :
+                            deployment.status === 'failed' ? 'destructive' :
+                            'secondary'
+                          }
+                          data-testid={`badge-status-${deployment.id}`}
+                        >
+                          {deployment.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground" data-testid={`text-date-${deployment.id}`}>
+                          {new Date(deployment.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      {deployment.deployUrl && (
+                        <a
+                          href={deployment.deployUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary hover:underline block truncate"
+                          data-testid={`link-url-${deployment.id}`}
+                        >
+                          {deployment.deployUrl}
+                        </a>
+                      )}
+                      {deployment.buildLog && deployment.status === 'failed' && (
+                        <p className="text-xs text-destructive mt-1" data-testid={`text-error-${deployment.id}`}>
+                          Error: {deployment.buildLog}
+                        </p>
+                      )}
+                    </div>
+                    {deployment.status === 'success' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => rollbackMutation.mutate(deployment.id)}
+                        disabled={rollbackMutation.isPending}
+                        data-testid={`button-rollback-${deployment.id}`}
+                      >
+                        Rollback
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </DialogContent>
       </Dialog>
