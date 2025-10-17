@@ -53,6 +53,9 @@ export interface IStorage {
   createDeployment(deployment: InsertDeployment): Promise<Deployment>;
   getDeploymentsByProjectId(projectId: string): Promise<Deployment[]>;
   updateDeployment(id: string, data: Partial<Deployment>): Promise<Deployment>;
+
+  // Sandbox utilities
+  getAllSandboxes(): Promise<Sandbox[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -265,6 +268,10 @@ export class MemStorage implements IStorage {
     const updated = { ...deployment, ...data };
     this.deployments.set(id, updated);
     return updated;
+  }
+
+  async getAllSandboxes(): Promise<Sandbox[]> {
+    return Array.from(this.sandboxes.values());
   }
 }
 

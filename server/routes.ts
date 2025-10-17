@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { storage } from "./storage";
+import { dbStorage as storage } from "./db-storage";
 import { dockerManager } from "./docker-manager";
 import { ollamaClient } from "./ollama-client";
 import { netlifyDeploy } from "./netlify-deploy";
@@ -449,9 +449,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sandbox cleanup job (run every 30 seconds)
   setInterval(async () => {
     const now = Date.now();
-    const sandboxes = (storage as any).sandboxes as Map<string, any>;
+    const sandboxes = await storage.getAllSandboxes();
     
-    for (const [id, sandbox] of Array.from(sandboxes.entries())) {
+    for (const sandbox of sandboxes) {
       const idleTime = now - sandbox.lastActivity.getTime();
       
       // Kill if idle > 60 seconds or runtime > 120 seconds
@@ -463,8 +463,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (sandbox.containerId) {
           await dockerManager.stopContainer(sandbox.containerId);
         }
-        await storage.deleteSandbox(id);
-        console.log(`Cleaned up sandbox ${id}`);
+        await storage.deleteSandbox(sandbox.id);
+        console.log(`Cleaned up sandbox ${sandbox.id}`);
       }
     }
   }, 30000);

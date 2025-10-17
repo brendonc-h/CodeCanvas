@@ -43,7 +43,7 @@ Preferred communication style: Simple, everyday language.
 - `/api/deploy` - Netlify deployment
 - WebSocket `/terminals/:projectId` - Interactive terminal sessions
 
-**Storage Strategy**: In-memory storage with file system persistence to `/tmp/webide-projects`. Data models are defined using Drizzle ORM schemas but currently implemented with a custom in-memory store. The architecture supports future migration to PostgreSQL.
+**Storage Strategy**: PostgreSQL database with Drizzle ORM for data persistence. All users, projects, files, sandboxes, AI interactions, and deployments are stored in the database. File content is also synced to disk at `/tmp/webide-projects` for Docker bind-mounts and builds.
 
 **Docker Integration**:
 - DockerManager class orchestrates sandbox containers
@@ -57,7 +57,8 @@ Preferred communication style: Simple, everyday language.
 - Sandboxes run with resource constraints
 - Only project directories are mounted (read-write)
 - Containers are ephemeral and auto-cleaned
-- Demo user session for MVP (email: demo@webide.dev)
+- PostgreSQL database for persistent user data
+- Demo user auto-created for MVP testing (email: demo@webide.dev)
 
 ### Data Models
 
@@ -103,10 +104,11 @@ Preferred communication style: Simple, everyday language.
 - Returns site URLs and deployment status
 - Site creation and update operations
 
-**Database (Future)**:
-- PostgreSQL connection configured via DATABASE_URL
-- Drizzle ORM for schema management and migrations
-- Currently using in-memory storage with file system sync
+**PostgreSQL Database**:
+- Production database with Drizzle ORM
+- Connection via DATABASE_URL environment variable
+- Tables: users, projects, files, sandboxes, ai_interactions, deployments
+- File content synced to disk for Docker mounts
 
 **WebSocket Communication**:
 - 'ws' library for WebSocket server
