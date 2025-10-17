@@ -1,0 +1,93 @@
+You are building a “Replit-lite” web IDE with local AI and cheap sandboxes.
+
+## Goal
+Create a full-stack MVP that lets users:
+1) Edit files (Monaco)
+2) Run commands in an isolated Docker sandbox with logs in real time (xterm.js terminal)
+3) See a live preview on a per-project subdomain/route
+4) Ask an on-device AI (Ollama) to explain/refactor/generate code
+5) Deploy static/SPAs to Netlify via token
+
+## Tech/Constraints
+- Frontend: Next.js (App Router), TypeScript, Monaco Editor, xterm.js, Zustand/React Query
+- Backend: Node (Express or Fastify) + TypeScript + WebSocket
+- Infra: docker-compose with services: traefik, api, frontend, redis, postgres, sandbox-manager, ollama
+- DB: Postgres for users/projects/files (keep simple), Prisma or Drizzle
+- Auth: email magic link (Supabase Auth) OR dummy session for MVP (pick one and stub cleanly)
+- AI: Ollama (Qwen2.5-Coder 7B by default) via http://ollama:11434
+- Deploy: Netlify API or CLI (token passed in by user), static/SPAs only for v1
+- Security: run sandboxes as non-root with CPU/mem limits; mount only project dir
+
+## Features to implement (MVP)
+- Project CRUD and templates: “Vite + React + TS”, “Next.js (static export)”, “Vanilla”
+- File tree (list/create/update/delete), Monaco editor with basic linting
+- Terminal: open WS to backend → spawn sandbox container → stream stdout/stderr → accept stdin
+- Run actions: “Install deps”, “Dev server”, “Build”
+- Preview: auto-detect port (5173 or 3000), expose via Traefik route `/preview/:projectId` (ok to use subpath for MVP)
+- AI panel: send current file or instructions to /ai/complete → return model output; include “Apply as patch” option
+- Netlify deploy button: build → upload → return URL
+- Basic rate limits: 1 active sandbox per user; kill if idle > 60s; max runtime 120s
+
+## Deliverables
+1) Repository layout:
+   /api (Express/Fastify, WS, Prisma/Drizzle)
+   /frontend (Next.js App Router)
+   /sandbox-manager (Docker orchestration helpers)
+   docker-compose.yml
+   README.md with setup steps
+
+2) docker-compose.yml with:
+   - traefik (route /api → api:3001, / → frontend:3000)
+   - postgres, redis
+   - ollama (persist model cache)
+   - api, frontend, sandbox-manager
+   - NOTE: mount /var/run/docker.sock into sandbox-manager only (NOT into user containers)
+
+3) API endpoints:
+   - POST /projects, GET /projects/:id/tree
+   - PUT /projects/:id/files (write), DELETE /projects/:id/files
+   - POST /runs (projectId, cmd[]) → start container; WS for streaming logs
+   - WS /terminals/:projectId (interactive shell)
+   - POST /ai/complete {model, prompt, filePath?, content?}
+   - POST /deploy/netlify {projectId, token, siteId?}
+
+4) Sandbox policy (enforce in code):
+   - docker run --rm --cpus=0.5 --memory=512m --pids-limit=256
+   - user: non-root
+   - working dir: /workspace (bind-mounted project dir)
+   - network allowed only during `npm ci` step (ok to skip strict egress block for MVP, but structure code for it)
+
+5) Frontend pages:
+   - / (dashboard list of projects + “New Project” modal with templates)
+   - /p/[id] editor view: left file tree, center Monaco, right AI panel, bottom xterm terminal, top actions (Install, Dev, Build, Deploy)
+   - /p/[id]/preview iframe that loads /preview/:id
+
+6) Minimal templates:
+   - vite-react-ts
+   - next-static (use `next export`)
+   - vanilla-js
+
+7) README:
+   - one-shot “docker compose up --build”
+   - how to pull an Ollama model: `ollama pull qwen2.5-coder:7b`
+   - how to set env (DATABASE_URL, OLLAMA_BASE_URL, NETLIFY token usage)
+   - notes on limits and future roadmap
+
+## Acceptance criteria
+- I can `docker compose up` and open the app.
+- Create a project from “vite-react-ts”, edit a file, run `npm ci` and `npm run dev`, see logs in terminal, preview loads.
+- AI panel returns suggestions from Ollama and can replace the current file content.
+- Click “Deploy to Netlify” with a token and get a deploy URL for the built SPA.
+- Sandboxes auto-kill after idle; starting a second sandbox closes the first.
+
+## Style/Quality
+- TypeScript strict mode on both frontend and backend.
+- Clean folder structure, small modules, and comments on tricky parts (WS, Docker spawn).
+- No hardcoding of local hostnames beyond what compose provides; use envs.
+
+Now scaffold the codebase and include:
+- docker-compose.yml
+- Dockerfiles for api/frontend/sandbox-manager
+- Minimal implementation of all endpoints and pages
+- A seed script to create a demo user and example project
+- Instructions in README.md
