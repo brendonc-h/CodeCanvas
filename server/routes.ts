@@ -9,35 +9,128 @@ import { fileSync } from "./file-sync";
 import { templateConfigs } from "@shared/schema";
 import * as path from "path";
 
+import { requireAuth, optionalAuth } from "./auth";
+import bcrypt from "bcrypt";
+
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
-  // Ensure demo user exists
+  // Auth routes
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { email, username, password } = req.body;
+
+      if (!email || !username || !password) {
+        return res.status(400).json({ error: "Email, username, and password required" });
+      }
+
+      // Check if user exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: "Email already registered" });
+      }
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Create user
+      const user = await storage.createUser({
+        email,
+        username,
+        passwordHash,
+      });
+
+      // Set session
+      req.session.userId = user.id;
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        username: user.username,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      const validPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!validPassword) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // Set session
+      req.session.userId = user.id;
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        username: user.username,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Logout failed" });
+      }
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/auth/me", optionalAuth, (req, res) => {
+    if (req.user) {
+      res.json(req.user);
+    } else {
+      res.status(401).json({ error: "Not authenticated" });
+    }
+  });
+
+  // Ensure demo user exists for backward compatibility
   let demoUser = await storage.getUserByEmail("demo@webide.dev");
   if (!demoUser) {
+    const demoPasswordHash = await bcrypt.hash("demo", 10);
     demoUser = await storage.createUser({
       email: "demo@webide.dev",
       username: "demo",
+      passwordHash: demoPasswordHash,
     });
   }
-  
-  const DEMO_USER_ID = demoUser.id;
 
   // Project routes
-  app.get("/api/projects", async (req, res) => {
+  app.get("/api/projects", requireAuth, async (req, res) => {
     try {
-      const projects = await storage.getProjectsByUserId(DEMO_USER_ID);
+      const projects = await storage.getProjectsByUserId(req.user!.id);
       res.json(projects);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/projects/:id", async (req, res) => {
+  app.get("/api/projects/:id", requireAuth, async (req, res) => {
     try {
       const project = await storage.getProject(req.params.id);
       if (!project) {
         return res.status(404).json({ error: "Project not found" });
+      }
+      // Check ownership
+      if (project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
       }
       res.json(project);
     } catch (error: any) {
@@ -45,7 +138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/projects", async (req, res) => {
+  app.post("/api/projects", requireAuth, async (req, res) => {
     try {
       const { name, template } = req.body;
       
@@ -59,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const project = await storage.createProject({
-        userId: DEMO_USER_ID,
+        userId: req.user!.id,
         name,
         template,
         description: templateConfig.description,
@@ -81,8 +174,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/projects/:id", async (req, res) => {
+  app.delete("/api/projects/:id", requireAuth, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      // Check ownership
+      if (project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
       await storage.deleteProject(req.params.id);
       await fileSync.deleteProject(req.params.id);
       res.json({ success: true });
@@ -92,8 +194,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // File routes
-  app.get("/api/projects/:id/files", async (req, res) => {
+  app.get("/api/projects/:id/files", requireAuth, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id);
+      if (!project || project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
       const files = await storage.getFilesByProjectId(req.params.id);
       res.json(files);
     } catch (error: any) {
@@ -101,8 +208,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/projects/:id/files", async (req, res) => {
+  app.post("/api/projects/:id/files", requireAuth, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id);
+      if (!project || project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
       const { path: filePath, content } = req.body;
       
       const file = await storage.createFile({
@@ -119,8 +231,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/projects/:id/files", async (req, res) => {
+  app.put("/api/projects/:id/files", requireAuth, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id);
+      if (!project || project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
       const { path: filePath, content } = req.body;
       
       const existing = await storage.getFileByPath(req.params.id, filePath);
@@ -144,8 +261,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/projects/:id/files", async (req, res) => {
+  app.delete("/api/projects/:id/files", requireAuth, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.id);
+      if (!project || project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
       const { path: filePath } = req.body;
       await storage.deleteFileByPath(req.params.id, filePath);
       await fileSync.deleteFile(req.params.id, filePath);
@@ -156,7 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Run command (creates sandbox if needed)
-  app.post("/api/runs", async (req, res) => {
+  app.post("/api/runs", requireAuth, async (req, res) => {
     try {
       const { projectId, command } = req.body;
 
@@ -164,8 +286,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid request" });
       }
 
+      // Check project ownership
+      const project = await storage.getProject(projectId);
+      if (!project || project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
       // Kill any existing sandbox for this user (1 per user limit)
-      const existingSandbox = await storage.getSandboxByUserId(DEMO_USER_ID);
+      const existingSandbox = await storage.getSandboxByUserId(req.user!.id);
       if (existingSandbox && existingSandbox.projectId !== projectId) {
         if (existingSandbox.containerId) {
           await dockerManager.stopContainer(existingSandbox.containerId);
@@ -186,7 +314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create Docker container
         const { containerId, port } = await dockerManager.createSandbox({
           projectId,
-          userId: DEMO_USER_ID,
+          userId: req.user!.id,
           workingDir: projectDir,
           cpus: 0.5,
           memory: 512,
@@ -195,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         sandbox = await storage.createSandbox({
           projectId,
-          userId: DEMO_USER_ID,
+          userId: req.user!.id,
           containerId,
           status: "running",
           port,
@@ -229,7 +357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI completion
-  app.post("/api/ai/complete", async (req, res) => {
+  app.post("/api/ai/complete", requireAuth, async (req, res) => {
     try {
       const { model, prompt, filePath, content } = req.body;
 
@@ -244,7 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Store interaction
       await storage.createAiInteraction({
-        userId: DEMO_USER_ID,
+        userId: req.user!.id,
         projectId: req.body.projectId || null,
         model,
         prompt,
@@ -260,7 +388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Netlify deployment
-  app.post("/api/deploy/netlify", async (req, res) => {
+  app.post("/api/deploy/netlify", requireAuth, async (req, res) => {
     try {
       const { projectId, siteId } = req.body;
 
@@ -272,13 +400,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!project) {
         return res.status(404).json({ error: "Project not found" });
       }
+      
+      // Check ownership
+      if (project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
 
       const template = templateConfigs[project.template as keyof typeof templateConfigs];
       
       // Create deployment record
       const deployment = await storage.createDeployment({
         projectId,
-        userId: DEMO_USER_ID,
+        userId: req.user!.id,
         siteId: siteId || null,
         status: "pending",
         deployUrl: null,
@@ -344,8 +477,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Preview route
-  app.get("/preview/:projectId", async (req, res) => {
+  app.get("/preview/:projectId", requireAuth, async (req, res) => {
     try {
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || project.userId !== req.user!.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
       const sandbox = await storage.getSandboxByProjectId(req.params.projectId);
       
       if (!sandbox || !sandbox.port) {
@@ -366,8 +504,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const url = request.url || '';
     
     if (url.startsWith('/ws/terminal/')) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
+      // Parse session to authenticate WebSocket connection
+      const sessionParser = app.get('sessionParser'); // We'll set this below
+      sessionParser(request as any, {} as any, async () => {
+        const session = (request as any).session;
+        
+        if (!session || !session.userId) {
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+
+        // Extract project ID and verify ownership
+        const match = url.match(/\/ws\/terminal\/([^/?]+)/);
+        const projectId = match ? match[1] : null;
+        
+        if (!projectId) {
+          socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+
+        const project = await storage.getProject(projectId);
+        if (!project || project.userId !== session.userId) {
+          socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit('connection', ws, request);
+        });
       });
     } else {
       socket.destroy();
@@ -385,7 +552,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return;
     }
 
-    // Handle terminal WebSocket
+    // Handle terminal WebSocket (already authenticated in upgrade)
     (async () => {
       try {
         let sandbox = await storage.getSandboxByProjectId(projectId);
