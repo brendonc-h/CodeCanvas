@@ -24,6 +24,7 @@ export type User = typeof users.$inferSelect;
 export const projects = pgTable("projects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  teamId: varchar("team_id").references(() => teams.id, { onDelete: "set null" }), // Optional team ownership
   name: text("name").notNull(),
   template: text("template").notNull(), // 'vite-react-ts' | 'next-static' | 'vanilla-js'
   description: text("description"),
@@ -84,7 +85,8 @@ export const aiInteractions = pgTable("ai_interactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   projectId: varchar("project_id").references(() => projects.id, { onDelete: "cascade" }),
-  model: text("model").notNull(), // 'qwen2.5-coder:7b' | 'codellama:7b' etc.
+  provider: text("provider").notNull(), // 'ollama', 'openai', 'anthropic'
+  model: text("model").notNull(), // 'qwen2.5-coder:7b' | 'gpt-4' | 'claude-3-sonnet'
   prompt: text("prompt").notNull(),
   response: text("response"),
   filePath: text("file_path"), // Context file
@@ -119,6 +121,175 @@ export const insertDeploymentSchema = createInsertSchema(deployments).omit({
 
 export type InsertDeployment = z.infer<typeof insertDeploymentSchema>;
 export type Deployment = typeof deployments.$inferSelect;
+
+// Teams table
+export const teams = pgTable("teams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertTeamSchema = createInsertSchema(teams).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTeam = z.infer<typeof insertTeamSchema>;
+export type Team = typeof teams.$inferSelect;
+
+// Team members table
+export const teamMembers = pgTable("team_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  teamId: varchar("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // 'admin' | 'member'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
+export type TeamMember = typeof teamMembers.$inferSelect;
+
+// User settings table for API keys and preferences
+export const userSettings = pgTable("user_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  key: text("key").notNull(), // e.g., 'openai_api_key', 'anthropic_api_key'
+  value: text("value"), // encrypted API key
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertUserSettingSchema = createInsertSchema(userSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUserSetting = z.infer<typeof insertUserSettingSchema>;
+export type UserSetting = typeof userSettings.$inferSelect;
+
+// Git repositories table
+export const gitRepositories = pgTable("git_repositories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  url: text("url"), // GitHub URL if connected
+  provider: text("provider").notNull(), // 'github' | 'gitlab' | 'bitbucket'
+  owner: text("owner"), // GitHub username/org
+  repo: text("repo"), // Repository name
+  branch: text("branch").default("main"),
+  isConnected: boolean("is_connected").default(false),
+  lastSync: timestamp("last_sync"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertGitRepositorySchema = createInsertSchema(gitRepositories).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertGitRepository = z.infer<typeof insertGitRepositorySchema>;
+export type GitRepository = typeof gitRepositories.$inferSelect;
+
+// Git commits table
+export const gitCommits = pgTable("git_commits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  repositoryId: varchar("repository_id").notNull().references(() => gitRepositories.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sha: text("sha").notNull(),
+  message: text("message").notNull(),
+  author: text("author").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertGitCommitSchema = createInsertSchema(gitCommits).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertGitCommit = z.infer<typeof insertGitCommitSchema>;
+export type GitCommit = typeof gitCommits.$inferSelect;
+
+// Resource usage table
+export const resourceUsage = pgTable("resource_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  projectId: varchar("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  resourceType: text("resource_type").notNull(), // 'cpu', 'memory', 'ai_tokens', 'deployments', 'sandboxes'
+  amount: integer("amount").notNull(), // Amount used (MB, tokens, seconds, etc.)
+  unit: text("unit").notNull(), // 'MB', 'tokens', 'seconds', 'count'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Metrics dashboard table
+export const metrics = pgTable("metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricType: text("metric_type").notNull(), // 'active_users', 'total_projects', 'ai_requests', etc.
+  value: integer("value").notNull(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
+export const insertResourceUsageSchema = createInsertSchema(resourceUsage).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMetricSchema = createInsertSchema(metrics).omit({
+  id: true,
+  timestamp: true,
+});
+
+// Shared templates table
+export const sharedTemplates = pgTable("shared_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  template: text("template").notNull(), // Base template type
+  files: jsonb("files").notNull(), // Template files as JSON
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isPublic: boolean("is_public").default(true),
+  tags: jsonb("tags"), // Array of tags
+  downloads: integer("downloads").default(0),
+  rating: integer("rating").default(0), // Average rating 1-5
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Template ratings table
+export const templateRatings = pgTable("template_ratings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateId: varchar("template_id").notNull().references(() => sharedTemplates.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(), // 1-5 stars
+  review: text("review"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertSharedTemplateSchema = createInsertSchema(sharedTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTemplateRatingSchema = createInsertSchema(templateRatings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertResourceUsage = z.infer<typeof insertResourceUsageSchema>;
+export type ResourceUsage = typeof resourceUsage.$inferSelect;
+export type InsertMetric = z.infer<typeof insertMetricSchema>;
+export type Metric = typeof metrics.$inferSelect;
+export type InsertSharedTemplate = z.infer<typeof insertSharedTemplateSchema>;
+export type SharedTemplate = typeof sharedTemplates.$inferSelect;
+export type InsertTemplateRating = z.infer<typeof insertTemplateRatingSchema>;
+export type TemplateRating = typeof templateRatings.$inferSelect;
 
 // Template configurations
 export const templateConfigs = {

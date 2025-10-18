@@ -11,6 +11,8 @@ import {
   EyeOff,
   Settings,
   History,
+  Keyboard,
+  Smartphone,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -44,6 +46,18 @@ export default function Editor() {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [siteId, setSiteId] = useState('')
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const { data: project } = useQuery<Project>({
     queryKey: ['/api/projects', id],
@@ -192,7 +206,11 @@ export default function Editor() {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
+          
+          {/* Mobile: Show device icon */}
+          {isMobile && <Smartphone className="h-5 w-5 text-muted-foreground" />}
+          
+          <div className={`${isMobile ? 'hidden' : ''}`}>
             <h1 className="text-sm font-semibold" data-testid="text-project-name">
               {project?.name || 'Loading...'}
             </h1>
@@ -203,74 +221,193 @@ export default function Editor() {
               </p>
             )}
           </div>
+          
+          {/* Mobile: Compact display */}
+          {isMobile && activeFile && (
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground font-mono truncate" data-testid="text-active-file-mobile">
+                {activeFile.split('/').pop()}
+                {hasUnsavedChanges && ' •'}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => runCommandMutation.mutate(['npm', 'ci'])}
-            disabled={runCommandMutation.isPending}
-            data-testid="button-install"
-          >
-            <Package className="h-4 w-4 mr-2" />
-            Install
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => runCommandMutation.mutate(['npm', 'run', 'dev'])}
-            disabled={runCommandMutation.isPending}
-            data-testid="button-dev"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Dev
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => runCommandMutation.mutate(['npm', 'run', 'build'])}
-            disabled={runCommandMutation.isPending}
-            data-testid="button-build"
-          >
-            <Square className="h-4 w-4 mr-2" />
-            Build
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDeployDialogOpen(true)}
-            data-testid="button-deploy"
-          >
-            <Rocket className="h-4 w-4 mr-2" />
-            Deploy
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setHistoryDialogOpen(true)}
-            data-testid="button-history"
-          >
-            <History className="h-4 w-4 mr-2" />
-            History
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowPreview(!showPreview)}
-            data-testid="button-toggle-preview"
-          >
-            {showPreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-            Preview
-          </Button>
+          {/* Mobile: Menu button */}
+          {isMobile ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              data-testid="button-mobile-menu"
+            >
+              <Keyboard className="h-4 w-4" />
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runCommandMutation.mutate(['npm', 'ci'])}
+                disabled={runCommandMutation.isPending}
+                data-testid="button-install"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                Install
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runCommandMutation.mutate(['npm', 'run', 'dev'])}
+                disabled={runCommandMutation.isPending}
+                data-testid="button-dev"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Dev
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => runCommandMutation.mutate(['npm', 'run', 'build'])}
+                disabled={runCommandMutation.isPending}
+                data-testid="button-build"
+              >
+                <Square className="h-4 w-4 mr-2" />
+                Build
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeployDialogOpen(true)}
+                data-testid="button-deploy"
+              >
+                <Rocket className="h-4 w-4 mr-2" />
+                Deploy
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoryDialogOpen(true)}
+                data-testid="button-history"
+              >
+                <History className="h-4 w-4 mr-2" />
+                History
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPreview(!showPreview)}
+                data-testid="button-toggle-preview"
+              >
+                {showPreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+                Preview
+              </Button>
+            </>
+          )}
           <ThemeToggle />
         </div>
       </header>
 
+      {/* Mobile Menu Overlay */}
+      {isMobile && showMobileMenu && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-lg p-4 w-full max-w-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Quick Actions</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowMobileMenu(false)}
+              >
+                ✕
+              </Button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  runCommandMutation.mutate(['npm', 'ci'])
+                  setShowMobileMenu(false)
+                }}
+                disabled={runCommandMutation.isPending}
+              >
+                <Package className="h-4 w-4 mr-1" />
+                Install
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  runCommandMutation.mutate(['npm', 'run', 'dev'])
+                  setShowMobileMenu(false)
+                }}
+                disabled={runCommandMutation.isPending}
+              >
+                <Play className="h-4 w-4 mr-1" />
+                Dev
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  runCommandMutation.mutate(['npm', 'run', 'build'])
+                  setShowMobileMenu(false)
+                }}
+                disabled={runCommandMutation.isPending}
+              >
+                <Square className="h-4 w-4 mr-1" />
+                Build
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleSaveFile()
+                  setShowMobileMenu(false)
+                }}
+                disabled={!hasUnsavedChanges}
+              >
+                💾 Save
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setDeployDialogOpen(true)
+                  setShowMobileMenu(false)
+                }}
+              >
+                <Rocket className="h-4 w-4 mr-1" />
+                Deploy
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowPreview(!showPreview)
+                  setShowMobileMenu(false)
+                }}
+              >
+                {showPreview ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
+                Preview
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Editor Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* File Tree */}
-        <div className="w-64 flex-shrink-0">
+      <div className="flex-1 flex overflow-hidden flex-col md:flex-row">
+        {/* File Tree - Collapsible on mobile */}
+        <div className={`${isMobile ? 'w-full h-48' : 'w-64'} flex-shrink-0 border-b md:border-b-0 md:border-r border-border`}>
           {!filesLoading && (
             <FileTree
               files={files}
@@ -283,9 +420,9 @@ export default function Editor() {
         </div>
 
         {/* Editor & Terminal */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0">
           {/* Monaco Editor */}
-          <div className="flex-1 bg-background">
+          <div className={`${isMobile ? 'h-96' : 'flex-1'} bg-background`}>
             {activeFile ? (
               <MonacoEditor
                 value={editorContent}
@@ -303,29 +440,40 @@ export default function Editor() {
             )}
           </div>
 
-          {/* Terminal */}
-          <div className="h-64 border-t border-border">
+          {/* Terminal - Smaller on mobile */}
+          <div className={`${isMobile ? 'h-48' : 'h-64'} border-t border-border`}>
             <Terminal projectId={id} />
           </div>
         </div>
 
-        {/* AI Panel */}
-        <AiPanel
-          projectId={id}
-          currentFile={activeFile}
-          currentContent={editorContent}
-          onApplyPatch={(content) => {
-            setEditorContent(content)
-            setHasUnsavedChanges(true)
-            toast({ title: "Patch applied", description: "Don't forget to save!" })
-          }}
-        />
+        {/* AI Panel - Hidden on mobile by default */}
+        {!isMobile && (
+          <AiPanel
+            projectId={id}
+            currentFile={activeFile}
+            currentContent={editorContent}
+            onApplyPatch={(content) => {
+              setEditorContent(content)
+              setHasUnsavedChanges(true)
+              toast({ title: "Patch applied", description: "Don't forget to save!" })
+            }}
+          />
+        )}
 
-        {/* Preview Panel */}
+        {/* Preview Panel - Responsive */}
         {showPreview && (
-          <div className="w-96 border-l border-border bg-card">
-            <div className="h-10 border-b border-border bg-sidebar flex items-center px-3">
+          <div className={`${isMobile ? 'fixed inset-0 z-40 bg-background' : 'w-96'} border-l border-border bg-card`}>
+            <div className="h-10 border-b border-border bg-sidebar flex items-center px-3 justify-between">
               <h3 className="text-sm font-semibold" data-testid="text-preview">Preview</h3>
+              {isMobile && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPreview(false)}
+                >
+                  ✕
+                </Button>
+              )}
             </div>
             <iframe
               src={`/preview/${id}`}

@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { db } from './db';
 import {
   users,
@@ -7,6 +7,15 @@ import {
   sandboxes,
   aiInteractions,
   deployments,
+  teams,
+  teamMembers,
+  userSettings,
+  gitRepositories,
+  gitCommits,
+  resourceUsage,
+  metrics,
+  sharedTemplates,
+  templateRatings,
   type User,
   type InsertUser,
   type Project,
@@ -19,6 +28,24 @@ import {
   type InsertAiInteraction,
   type Deployment,
   type InsertDeployment,
+  type Team,
+  type InsertTeam,
+  type TeamMember,
+  type InsertTeamMember,
+  type UserSetting,
+  type InsertUserSetting,
+  type GitRepository,
+  type InsertGitRepository,
+  type GitCommit,
+  type InsertGitCommit,
+  type ResourceUsage,
+  type InsertResourceUsage,
+  type Metric,
+  type InsertMetric,
+  type SharedTemplate,
+  type InsertSharedTemplate,
+  type TemplateRating,
+  type InsertTemplateRating,
 } from '@shared/schema';
 import type { IStorage } from './storage';
 
@@ -209,6 +236,253 @@ export class DbStorage implements IStorage {
     
     if (!result[0]) throw new Error('Deployment not found');
     return result[0];
+  }
+
+  // Teams
+  async getTeam(id: string): Promise<Team | undefined> {
+    const result = await db.select().from(teams).where(eq(teams.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getTeamsByUserId(userId: string): Promise<Team[]> {
+    const result = await db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        description: teams.description,
+        createdAt: teams.createdAt,
+      })
+      .from(teamMembers)
+      .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+      .where(eq(teamMembers.userId, userId));
+    return result;
+  }
+
+  async createTeam(insertTeam: InsertTeam): Promise<Team> {
+    const result = await db.insert(teams).values(insertTeam).returning();
+    return result[0];
+  }
+
+  async updateTeam(id: string, data: Partial<Team>): Promise<Team> {
+    const result = await db
+      .update(teams)
+      .set(data)
+      .where(eq(teams.id, id))
+      .returning();
+    
+    if (!result[0]) throw new Error('Team not found');
+    return result[0];
+  }
+
+  async deleteTeam(id: string): Promise<void> {
+    await db.delete(teams).where(eq(teams.id, id));
+  }
+
+  // Team Members
+  async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+    return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId));
+  }
+
+  async addTeamMember(insertMember: InsertTeamMember): Promise<TeamMember> {
+    const result = await db.insert(teamMembers).values(insertMember).returning();
+    return result[0];
+  }
+
+  async updateTeamMember(teamId: string, userId: string, role: string): Promise<TeamMember> {
+    const result = await db
+      .update(teamMembers)
+      .set({ role })
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+      .returning();
+    
+    if (!result[0]) throw new Error('Team member not found');
+    return result[0];
+  }
+
+  async removeTeamMember(teamId: string, userId: string): Promise<void> {
+    await db
+      .delete(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+  }
+
+  // User Settings
+  async getUserSettings(userId: string): Promise<UserSetting[]> {
+    return db.select().from(userSettings).where(eq(userSettings.userId, userId));
+  }
+
+  async getUserSetting(userId: string, key: string): Promise<UserSetting | undefined> {
+    const result = await db
+      .select()
+      .from(userSettings)
+      .where(and(eq(userSettings.userId, userId), eq(userSettings.key, key)))
+      .limit(1);
+    return result[0];
+  }
+
+  async setUserSetting(userId: string, key: string, value: string | null): Promise<UserSetting> {
+    const existing = await this.getUserSetting(userId, key);
+    
+    if (existing) {
+      const result = await db
+        .update(userSettings)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(userSettings.id, existing.id))
+        .returning();
+      return result[0];
+    } else {
+      const result = await db
+        .insert(userSettings)
+        .values({ userId, key, value })
+        .returning();
+      return result[0];
+    }
+  }
+
+  async deleteUserSetting(userId: string, key: string): Promise<void> {
+    await db
+      .delete(userSettings)
+      .where(and(eq(userSettings.userId, userId), eq(userSettings.key, key)));
+  }
+
+  // Git Repositories
+  async getGitRepository(id: string): Promise<GitRepository | undefined> {
+    const result = await db.select().from(gitRepositories).where(eq(gitRepositories.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getGitRepositoriesByProjectId(projectId: string): Promise<GitRepository[]> {
+    return db.select().from(gitRepositories).where(eq(gitRepositories.projectId, projectId));
+  }
+
+  async createGitRepository(insertRepo: InsertGitRepository): Promise<GitRepository> {
+    const result = await db.insert(gitRepositories).values(insertRepo).returning();
+    return result[0];
+  }
+
+  async updateGitRepository(id: string, data: Partial<GitRepository>): Promise<GitRepository> {
+    const result = await db
+      .update(gitRepositories)
+      .set(data)
+      .where(eq(gitRepositories.id, id))
+      .returning();
+    
+    if (!result[0]) throw new Error('Git repository not found');
+    return result[0];
+  }
+
+  async deleteGitRepository(id: string): Promise<void> {
+    await db.delete(gitRepositories).where(eq(gitRepositories.id, id));
+  }
+
+  // Git Commits
+  async createGitCommit(insertCommit: InsertGitCommit): Promise<GitCommit> {
+    const result = await db.insert(gitCommits).values(insertCommit).returning();
+    return result[0];
+  }
+
+  async getGitCommitsByRepositoryId(repositoryId: string): Promise<GitCommit[]> {
+    return db
+      .select()
+      .from(gitCommits)
+      .where(eq(gitCommits.repositoryId, repositoryId))
+      .orderBy(gitCommits.createdAt);
+  }
+
+  // Resource Usage
+  async createResourceUsage(insertUsage: InsertResourceUsage): Promise<ResourceUsage> {
+    const result = await db.insert(resourceUsage).values(insertUsage).returning();
+    return result[0];
+  }
+
+  async getResourceUsageByUserId(userId: string, limit = 100): Promise<ResourceUsage[]> {
+    return db
+      .select()
+      .from(resourceUsage)
+      .where(eq(resourceUsage.userId, userId))
+      .orderBy(resourceUsage.createdAt)
+      .limit(limit);
+  }
+
+  async getResourceUsageByProjectId(projectId: string): Promise<ResourceUsage[]> {
+    return db
+      .select()
+      .from(resourceUsage)
+      .where(eq(resourceUsage.projectId, projectId))
+      .orderBy(resourceUsage.createdAt);
+  }
+
+  // Metrics
+  async createMetric(insertMetric: InsertMetric): Promise<Metric> {
+    const result = await db.insert(metrics).values(insertMetric).returning();
+    return result[0];
+  }
+
+  async getMetricsByType(metricType: string, limit = 50): Promise<Metric[]> {
+    return db
+      .select()
+      .from(metrics)
+      .where(eq(metrics.metricType, metricType))
+      .orderBy(metrics.timestamp)
+      .limit(limit);
+  }
+
+  async getLatestMetrics(): Promise<Metric[]> {
+    // Get the latest metric for each type
+    const result = await db.execute(sql`
+      SELECT DISTINCT ON (metric_type) *
+      FROM metrics
+      ORDER BY metric_type, timestamp DESC
+    `);
+    return result.rows as Metric[];
+  }
+
+  // Shared Templates
+  async getSharedTemplates(limit = 50): Promise<SharedTemplate[]> {
+    return db
+      .select()
+      .from(sharedTemplates)
+      .where(eq(sharedTemplates.isPublic, true))
+      .orderBy(sharedTemplates.createdAt)
+      .limit(limit);
+  }
+
+  async getSharedTemplate(id: string): Promise<SharedTemplate | undefined> {
+    const result = await db.select().from(sharedTemplates).where(eq(sharedTemplates.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createSharedTemplate(insertTemplate: InsertSharedTemplate): Promise<SharedTemplate> {
+    const result = await db.insert(sharedTemplates).values(insertTemplate).returning();
+    return result[0];
+  }
+
+  async updateSharedTemplate(id: string, data: Partial<SharedTemplate>): Promise<SharedTemplate> {
+    const result = await db
+      .update(sharedTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(sharedTemplates.id, id))
+      .returning();
+    
+    if (!result[0]) throw new Error('Shared template not found');
+    return result[0];
+  }
+
+  async deleteSharedTemplate(id: string): Promise<void> {
+    await db.delete(sharedTemplates).where(eq(sharedTemplates.id, id));
+  }
+
+  // Template Ratings
+  async createTemplateRating(insertRating: InsertTemplateRating): Promise<TemplateRating> {
+    const result = await db.insert(templateRatings).values(insertRating).returning();
+    return result[0];
+  }
+
+  async getTemplateRatings(templateId: string): Promise<TemplateRating[]> {
+    return db
+      .select()
+      .from(templateRatings)
+      .where(eq(templateRatings.templateId, templateId))
+      .orderBy(templateRatings.createdAt);
   }
 }
 
