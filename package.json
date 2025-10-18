@@ -1,13 +1,22 @@
 {
-  "name": "rest-express",
+  "name": "codecanvas-ide",
   "version": "1.0.0",
+  "description": "Professional web-based IDE with AI integration, Git support, and mobile optimization",
   "type": "module",
   "license": "MIT",
+  "author": "Brendon Curry-Hobbs",
+  "keywords": ["ide", "web-ide", "code-editor", "ai-coding", "mobile-ide", "replit-alternative"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/codecanvas"
+  },
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
