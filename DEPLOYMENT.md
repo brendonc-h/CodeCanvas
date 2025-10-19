@@ -1,5 +1,23 @@
 # 🚀 CodeCanvas Deployment Guide
 
+## 💰 Cost Comparison (Cheaper than Replit!)
+
+| Platform | Hosting | Database | AI | Total/Month |
+|----------|---------|----------|-----|-------------|
+| **Railway Free** | $5 credits | Neon Free | Groq Free | **$0** ✅ |
+| **Render Free** | Free tier | Neon Free | Groq Free | **$0** ✅ |
+| **Railway Paid** | $5 | Neon Free | Groq Free | **$5** ✅ |
+| **Replit Hacker** | $7 | Built-in | Self-host | **$7+** ❌ |
+
+### 🏆 Recommended Stack (100% FREE):
+- **Hosting**: Railway (free tier)
+- **Database**: Neon.tech (free 0.5GB)
+- **AI**: Groq (free 14,400 requests/day)
+- **Auth**: Supabase (free tier)
+- **Total**: **$0/month** 🎉
+
+---
+
 ## 📋 Prerequisites
 
 Before deploying, ensure you have:
@@ -7,25 +25,17 @@ Before deploying, ensure you have:
 - ✅ PostgreSQL database (Neon recommended)
 - ✅ Supabase account for authentication
 - ✅ (Optional) Netlify account for deployment features
-- ✅ (Optional) AI API keys (OpenAI, Grok, Anthropic, Ollama)
+- ✅ (Optional) AI API keys (Groq FREE, OpenAI, Grok, Anthropic)
 
 ---
 
 ## 🎯 Quick Deploy Options
 
-### Option 1: Deploy to Replit (Easiest)
+### 🏆 Option 1: Deploy to Railway (Recommended)
 
-1. **Fork this project** on Replit
-2. **Set environment variables** in Replit Secrets:
-   - `DATABASE_URL`
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-   - `SESSION_SECRET`
-3. **Run** `npm install`
-4. **Run** `npm run db:generate && npm run db:migrate`
-5. **Click Run** - Your IDE is live!
+**Why Railway?** Persistent server, WebSockets work, terminal works, $0-5/month
 
-### Option 2: Deploy to Railway
+#### Quick Deploy:
 
 ```bash
 # Install Railway CLI
@@ -37,17 +47,45 @@ railway login
 # Initialize project
 railway init
 
-# Add environment variables
-railway variables set DATABASE_URL="your-neon-url"
-railway variables set SUPABASE_URL="your-supabase-url"
-railway variables set SUPABASE_ANON_KEY="your-key"
-railway variables set SESSION_SECRET="random-secret"
+# Set environment variables
+railway variables set DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
+railway variables set SUPABASE_URL="https://your-project.supabase.co"
+railway variables set SUPABASE_ANON_KEY="your-supabase-anon-key"
+railway variables set SESSION_SECRET="$(openssl rand -base64 32)"
+railway variables set GROQ_API_KEY="gsk_your-groq-api-key"
+railway variables set PORT="8000"
+railway variables set ALLOWED_ORIGINS="https://your-app.up.railway.app"
 
 # Deploy
 railway up
+
+# Run migrations
+railway run npm run db:generate
+railway run npm run db:migrate
 ```
 
-### Option 3: Deploy to Render
+#### Get Required Services (All FREE):
+
+**1. Database (Neon)**:
+- Go to [neon.tech](https://neon.tech)
+- Create project (free 0.5GB)
+- Copy connection string
+
+**2. Authentication (Supabase)**:
+- Go to [supabase.com](https://supabase.com)
+- Create project (free 50K users)
+- Get URL + anon key from Settings → API
+
+**3. AI (Groq)**:
+- Go to [console.groq.com](https://console.groq.com)
+- Sign up (free 14,400 requests/day)
+- Create API key
+
+**Cost: $0/month** 🎉
+
+---
+
+### Option 2: Deploy to Render
 
 1. **Connect GitHub repo** to Render
 2. **Create Web Service**

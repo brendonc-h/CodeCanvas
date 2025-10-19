@@ -1,6 +1,8 @@
-# Web IDE - Replit-lite with Local AI and Docker Sandboxes
+# 🎨 CodeCanvas - Professional Web IDE
 
-A production-grade web-based IDE with real Docker sandboxes, multi-model AI assistance via Ollama, and Netlify deployment integration.
+> **A modern, full-featured web IDE that's cheaper than Replit!**
+
+A production-grade web-based IDE with AI assistance (Groq, OpenAI, Grok, Claude), Git integration, mobile optimization, and one-click deployment. Deploy for **$0-5/month** vs Replit's $7/month.
 
 ## Features
 
@@ -10,14 +12,14 @@ A production-grade web-based IDE with real Docker sandboxes, multi-model AI assi
 - **File Tree**: Hierarchical file navigation with create, delete, and context menu operations
 - **Interactive Terminal**: Real-time terminal access to Docker containers via WebSocket (xterm.js)
 - **Live Preview**: Auto-detect dev server ports and preview running applications
-- **AI Code Assistant**: Multi-model support (Qwen2.5-Coder, CodeLlama, DeepSeek) for code explanation, refactoring, and generation
+- **AI Code Assistant**: Multi-model support (Groq/Llama 3.3 70B, OpenAI GPT-4, Grok, Claude) for code explanation, refactoring, and generation
 - **Netlify Deployment**: One-click deployment of static sites and SPAs to Netlify
 
 ### Technical Architecture
 - **Frontend**: React + TypeScript + Monaco Editor + xterm.js + Tailwind CSS
 - **Backend**: Express + TypeScript + WebSocket (ws)
 - **Sandboxing**: Docker containers with resource limits (0.5 CPU, 512MB RAM, 256 PIDs)
-- **AI**: Ollama local LLM server
+- **AI**: Groq (FREE cloud API), OpenAI, Grok, Claude
 - **Deployment**: Netlify API integration
 - **Storage**: In-memory with file system persistence
 
@@ -25,7 +27,7 @@ A production-grade web-based IDE with real Docker sandboxes, multi-model AI assi
 
 - Node.js 20+
 - **Docker (Required)** - The IDE uses Docker containers for sandboxed code execution. Docker must be running and accessible via `/var/run/docker.sock`
-- Ollama (for AI features) - Optional but recommended
+- Groq API key (for AI features) - FREE at console.groq.com
 
 ⚠️ **Note**: This application requires Docker to be installed and running on the host system. It cannot run in environments without Docker support (like nested containers or restricted cloud environments).
 

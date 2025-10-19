@@ -1,10 +1,8 @@
 import axios from 'axios';
 import { dbStorage } from './db-storage';
 
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-
 export interface AIRequest {
-  provider: 'ollama' | 'openai' | 'anthropic' | 'grok';
+  provider: 'groq' | 'openai' | 'anthropic' | 'grok';
   model: string;
   prompt: string;
   apiKey?: string; // For external providers
@@ -16,16 +14,18 @@ export class AIClient {
 
     try {
       switch (provider) {
-        case 'ollama':
-          return await this.generateOllama(model, prompt);
+        case 'groq':
+          const groqKey = apiKey || (await this.getUserApiKey(userId, 'groq_api_key')) || process.env.GROQ_API_KEY;
+          if (!groqKey) throw new Error('Groq API key not configured');
+          return await this.generateGroq(model, prompt, groqKey);
 
         case 'openai':
-          const openaiKey = apiKey || (await this.getUserApiKey(userId, 'openai_api_key'));
+          const openaiKey = apiKey || (await this.getUserApiKey(userId, 'openai_api_key')) || process.env.OPENAI_API_KEY;
           if (!openaiKey) throw new Error('OpenAI API key not configured');
           return await this.generateOpenAI(model, prompt, openaiKey);
 
         case 'anthropic':
-          const anthropicKey = apiKey || (await this.getUserApiKey(userId, 'anthropic_api_key'));
+          const anthropicKey = apiKey || (await this.getUserApiKey(userId, 'anthropic_api_key')) || process.env.ANTHROPIC_API_KEY;
           if (!anthropicKey) throw new Error('Anthropic API key not configured');
           return await this.generateAnthropic(model, prompt, anthropicKey);
 
@@ -43,19 +43,24 @@ export class AIClient {
     }
   }
 
-  private async generateOllama(model: string, prompt: string): Promise<string> {
+  private async generateGroq(model: string, prompt: string, apiKey: string): Promise<string> {
     const response = await axios.post(
-      `${OLLAMA_BASE_URL}/api/generate`,
+      'https://api.groq.com/openai/v1/chat/completions',
       {
-        model,
-        prompt,
-        stream: false,
+        model: model || 'llama-3.3-70b-versatile', // Default to Llama 3.3 70B (FREE)
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.7,
       },
       {
-        timeout: 120000, // 2 minute timeout
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 60000,
       }
     );
-    return response.data.response;
+    return response.data.choices[0].message.content;
   }
 
   private async generateOpenAI(model: string, prompt: string, apiKey: string): Promise<string> {
@@ -125,9 +130,15 @@ export class AIClient {
   async listModels(provider: string, userId?: string): Promise<string[]> {
     try {
       switch (provider) {
-        case 'ollama':
-          const response = await axios.get(`${OLLAMA_BASE_URL}/api/tags`);
-          return response.data.models?.map((m: any) => m.name) || [];
+        case 'groq':
+          // Return available Groq models (FREE, fast inference)
+          return [
+            'llama-3.3-70b-versatile',    // Best quality (FREE)
+            'llama-3.1-70b-versatile',    // Great quality
+            'llama-3.1-8b-instant',       // Fastest
+            'mixtral-8x7b-32768',         // Long context
+            'gemma2-9b-it'                // Google's model
+          ];
 
         case 'openai':
           // Return common OpenAI models
@@ -153,16 +164,24 @@ export class AIClient {
   async checkProviderHealth(provider: string, userId?: string): Promise<boolean> {
     try {
       switch (provider) {
-        case 'ollama':
-          await axios.get(`${OLLAMA_BASE_URL}/api/tags`, { timeout: 5000 });
-          return true;
+        case 'groq':
+          const groqKey = (userId ? await this.getUserApiKey(userId, 'groq_api_key') : null) || process.env.GROQ_API_KEY;
+          if (!groqKey) return false;
+          try {
+            await axios.get('https://api.groq.com/openai/v1/models', {
+              headers: { 'Authorization': `Bearer ${groqKey}` },
+              timeout: 5000,
+            });
+            return true;
+          } catch (error) {
+            return false;
+          }
 
         case 'openai':
-          if (!userId) return false;
-          const apiKey = await this.getUserApiKey(userId, 'openai_api_key');
-          if (!apiKey) return false;
+          const openaiKey = (userId ? await this.getUserApiKey(userId, 'openai_api_key') : null) || process.env.OPENAI_API_KEY;
+          if (!openaiKey) return false;
           await axios.get('https://api.openai.com/v1/models', {
-            headers: { 'Authorization': `Bearer ${apiKey}` },
+            headers: { 'Authorization': `Bearer ${openaiKey}` },
             timeout: 5000,
           });
           return true;
