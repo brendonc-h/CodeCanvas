@@ -97,6 +97,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(limiter);
   app.use("/api/auth", authLimiter);
 
+  // Authentication routes
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { error, value } = userSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+      }
+
+      const { email, username, password } = value;
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: "Email already registered" });
+      }
+
+      // Create user in our database
+      const passwordHash = await bcrypt.hash(password, 10);
+      const user = await storage.createUser({
+        email,
+        username,
+        passwordHash,
+      });
+
+      res.json({ 
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+        }
+      });
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      res.status(500).json({ error: "Failed to create account" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+
+      // Get user from database
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      // Verify password
+      const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+
+      // Set session
+      if (req.session) {
+        req.session.userId = user.id;
+      }
+
+      res.json({ 
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+        }
+      });
+    } catch (error: any) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    if (req.session) {
+      req.session.destroy((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Logout failed" });
+        }
+        res.json({ success: true });
+      });
+    } else {
+      res.json({ success: true });
+    }
+  });
+
+  app.get("/api/auth/me", requireAuth, (req, res) => {
+    res.json({ user: req.user });
+  });
+
   // Input sanitization middleware
   const sanitizeInput = (req: any, res: any, next: any) => {
     // Basic input sanitization

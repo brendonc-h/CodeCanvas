@@ -63,9 +63,9 @@ export default function AuthPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Web IDE</CardTitle>
-          <CardDescription>Sign in or create an account to get started</CardDescription>
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-bold">🎨 CodeCanvas</CardTitle>
+          <CardDescription>Professional Web IDE - Sign in or create your account</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "login" | "signup")}>

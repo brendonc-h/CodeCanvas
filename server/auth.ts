@@ -20,30 +20,18 @@ declare global {
   }
 }
 
-// Supabase auth middleware - verifies JWT token
+// Session-based auth middleware
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authorization header required' });
+    // Check for session
+    if (!req.session?.userId) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const token = authHeader.substring(7);
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    // Get or create user in our database
-    let dbUser = await dbStorage.getUserByEmail(user.email!);
+    // Get user from database
+    const dbUser = await dbStorage.getUserById(req.session.userId);
     if (!dbUser) {
-      // Extract username from email or use a default
-      const username = user.email!.split('@')[0];
-      dbUser = await dbStorage.createUser({
-        email: user.email!,
-        username,
-      });
+      return res.status(401).json({ error: 'User not found' });
     }
 
     req.user = {
@@ -54,6 +42,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     next();
   } catch (error) {
+    console.error('Auth error:', error);
     res.status(401).json({ error: 'Authentication failed' });
   }
 }
