@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Terminal as XTerm } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import "@xterm/xterm/css/xterm.css"
 import { Button } from "@/components/ui/button"
-import { Trash2, X } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Trash2, X, Circle, AlertCircle } from "lucide-react"
 
 interface TerminalProps {
   projectId: string
@@ -15,6 +16,7 @@ export function Terminal({ projectId }: TerminalProps) {
   const xtermRef = useRef<XTerm | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting')
 
   useEffect(() => {
     if (!terminalRef.current) return
@@ -64,7 +66,9 @@ export function Terminal({ projectId }: TerminalProps) {
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
-      term.writeln('Terminal connected. Type commands below:')
+      setConnectionStatus('connected')
+      term.writeln('\x1b[32m✓ Terminal connected\x1b[0m')
+      term.writeln('Type commands below or use the buttons above to run scripts.')
       term.write('$ ')
     }
 
@@ -73,11 +77,15 @@ export function Terminal({ projectId }: TerminalProps) {
     }
 
     ws.onerror = () => {
-      term.writeln('\r\n\x1b[31mWebSocket connection error\x1b[0m')
+      setConnectionStatus('error')
+      term.writeln('\r\n\x1b[31m✗ WebSocket connection error\x1b[0m')
+      term.writeln('\x1b[33mTip: Click "Dev" or "Install" button to start a sandbox\x1b[0m')
     }
 
     ws.onclose = () => {
-      term.writeln('\r\n\x1b[33mTerminal disconnected\x1b[0m')
+      setConnectionStatus('disconnected')
+      term.writeln('\r\n\x1b[33m⚠ Terminal disconnected\x1b[0m')
+      term.writeln('\x1b[33mStart the dev server to reconnect\x1b[0m')
     }
 
     term.onData((data) => {
@@ -114,7 +122,20 @@ export function Terminal({ projectId }: TerminalProps) {
   return (
     <div className="flex flex-col h-full bg-card border-t border-card-border">
       <div className="h-10 border-b border-border bg-sidebar flex items-center justify-between px-3">
-        <h3 className="text-sm font-semibold" data-testid="text-terminal">Terminal</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold" data-testid="text-terminal">Terminal</h3>
+          <Badge 
+            variant={connectionStatus === 'connected' ? 'default' : connectionStatus === 'error' ? 'destructive' : 'secondary'}
+            className="h-5 text-xs"
+          >
+            <Circle className={`h-2 w-2 mr-1 fill-current ${
+              connectionStatus === 'connected' ? 'animate-pulse' : ''
+            }`} />
+            {connectionStatus === 'connected' ? 'Connected' : 
+             connectionStatus === 'error' ? 'Error' :
+             connectionStatus === 'disconnected' ? 'Disconnected' : 'Connecting'}
+          </Badge>
+        </div>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"

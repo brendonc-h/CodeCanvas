@@ -128,6 +128,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/metrics", metricsRouter);
   app.use("/api/settings", settingsRouter);
 
+  // Preview route - proxy to sandbox dev server
+  app.get("/preview/:projectId", async (req, res) => {
+    try {
+      const session = (req as any).session;
+      if (!session || !session.userId) {
+        return res.status(401).send("Unauthorized");
+      }
+
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || project.userId !== session.userId) {
+        return res.status(403).send("Forbidden");
+      }
+
+      const sandbox = await storage.getSandboxByProjectId(req.params.projectId);
+
+      if (!sandbox || !sandbox.port) {
+        return res.status(503).send(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Preview Not Available</title>
+              <style>
+                body {
+                  font-family: system-ui, -apple-system, sans-serif;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  margin: 0;
+                  background: #1a1a1f;
+                  color: #e5e7eb;
+                }
+                .container {
+                  text-align: center;
+                  max-width: 500px;
+                  padding: 2rem;
+                }
+                h1 { color: #f59e0b; margin-bottom: 1rem; }
+                p { color: #9ca3af; line-height: 1.6; }
+                .icon { font-size: 4rem; margin-bottom: 1rem; }
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <div class="icon">🚀</div>
+                <h1>Preview Not Available</h1>
+                <p>The development server is not running.</p>
+                <p>Click the <strong>"Dev"</strong> button in the toolbar to start your app, then the preview will load automatically.</p>
+              </div>
+            </body>
+          </html>
+        `);
+      }
+
+      // Proxy to the container's port
+      res.redirect(`http://localhost:${sandbox.port}`);
+    } catch (error: any) {
+      res.status(500).send(`Preview error: ${error.message}`);
+    }
+  });
+
+  // Get sandbox status for a project
+  app.get("/api/projects/:id/sandbox", async (req, res) => {
+    try {
+      const session = (req as any).session;
+      if (!session || !session.userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const project = await storage.getProject(req.params.id);
+      if (!project || project.userId !== session.userId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const sandbox = await storage.getSandboxByProjectId(req.params.id);
+      
+      if (!sandbox) {
+        return res.json(null);
+      }
+
+      res.json({
+        id: sandbox.id,
+        containerId: sandbox.containerId,
+        port: sandbox.port,
+        status: sandbox.containerId ? 'running' : 'stopped',
+        createdAt: sandbox.createdAt,
+        lastActivity: sandbox.lastActivity,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Run command (creates sandbox if needed)
   app.post("/api/runs", async (req, res) => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams, useLocation } from "wouter"
 import { useQuery, useMutation } from "@tanstack/react-query"
 import {
@@ -13,9 +13,22 @@ import {
   History,
   Keyboard,
   Smartphone,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelRightClose,
+  Save,
+  Terminal as TerminalIcon,
+  Bot,
+  RotateCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable"
 import {
   Dialog,
   DialogContent,
@@ -31,6 +44,8 @@ import { FileTree } from "@/components/editor/file-tree"
 import { MonacoEditor } from "@/components/editor/monaco-editor"
 import { Terminal } from "@/components/editor/terminal"
 import { AiPanel } from "@/components/editor/ai-panel"
+import { KeyboardShortcutsDialog } from "@/components/editor/keyboard-shortcuts-dialog"
+import { SandboxStatus } from "@/components/editor/sandbox-status"
 import { ThemeToggle } from "@/components/theme-toggle"
 import type { Project, File } from "@shared/schema"
 
@@ -48,6 +63,11 @@ export default function Editor() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [showFileTree, setShowFileTree] = useState(true)
+  const [showAiPanel, setShowAiPanel] = useState(true)
+  const [showTerminal, setShowTerminal] = useState(true)
+  const [previewKey, setPreviewKey] = useState(0)
+  const previewRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -84,6 +104,17 @@ export default function Editor() {
       queryClient.invalidateQueries({ queryKey: ['/api/projects', id, 'files'] })
       setHasUnsavedChanges(false)
       toast({ title: "File saved" })
+      // Auto-refresh preview when files are saved
+      if (showPreview) {
+        setPreviewKey(prev => prev + 1)
+      }
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to save file", 
+        description: error?.message || "An error occurred",
+        variant: "destructive"
+      })
     },
   })
 
@@ -94,6 +125,13 @@ export default function Editor() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/projects', id, 'files'] })
       toast({ title: "File created" })
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to create file", 
+        description: error?.message || "An error occurred",
+        variant: "destructive"
+      })
     },
   })
 
@@ -106,6 +144,13 @@ export default function Editor() {
       if (activeFile === deletedPath) setActiveFile(null)
       toast({ title: "File deleted" })
     },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to delete file", 
+        description: error?.message || "An error occurred",
+        variant: "destructive"
+      })
+    },
   })
 
   const runCommandMutation = useMutation({
@@ -114,6 +159,14 @@ export default function Editor() {
     },
     onSuccess: () => {
       toast({ title: "Command started" })
+    },
+    onError: (error: any) => {
+      console.error('Run command error:', error)
+      toast({ 
+        title: "Command failed", 
+        description: error?.message || "Failed to start command. Check console for details.",
+        variant: "destructive"
+      })
     },
   })
 
@@ -134,7 +187,7 @@ export default function Editor() {
     },
   })
 
-  const { data: deployments = [] } = useQuery({
+  const { data: deployments = [] } = useQuery<any[]>({
     queryKey: ['/api/projects', id, 'deployments'],
     refetchInterval: 5000, // Poll every 5s for deployment status updates
   })
@@ -164,11 +217,45 @@ export default function Editor() {
     }
   }
 
+  // Enhanced keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      const isMod = e.ctrlKey || e.metaKey
+      
+      // Cmd/Ctrl + S: Save file
+      if (isMod && e.key === 's') {
         e.preventDefault()
         handleSaveFile()
+      }
+      // Cmd/Ctrl + B: Toggle file tree
+      else if (isMod && e.key === 'b') {
+        e.preventDefault()
+        setShowFileTree(prev => !prev)
+      }
+      // Cmd/Ctrl + J: Toggle terminal
+      else if (isMod && e.key === 'j') {
+        e.preventDefault()
+        setShowTerminal(prev => !prev)
+      }
+      // Cmd/Ctrl + K: Toggle AI panel
+      else if (isMod && e.key === 'k') {
+        e.preventDefault()
+        setShowAiPanel(prev => !prev)
+      }
+      // Cmd/Ctrl + P: Toggle preview
+      else if (isMod && e.key === 'p') {
+        e.preventDefault()
+        setShowPreview(prev => !prev)
+      }
+      // Cmd/Ctrl + R: Run dev server
+      else if (isMod && e.key === 'r') {
+        e.preventDefault()
+        runCommandMutation.mutate(['npm', 'run', 'dev'])
+      }
+      // Cmd/Ctrl + Shift + B: Build
+      else if (isMod && e.shiftKey && e.key === 'B') {
+        e.preventDefault()
+        runCommandMutation.mutate(['npm', 'run', 'build'])
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -249,6 +336,17 @@ export default function Editor() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={handleSaveFile}
+                disabled={!hasUnsavedChanges}
+                data-testid="button-save"
+                title="Save (Cmd/Ctrl+S)"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Save
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => runCommandMutation.mutate(['npm', 'ci'])}
                 disabled={runCommandMutation.isPending}
                 data-testid="button-install"
@@ -262,6 +360,7 @@ export default function Editor() {
                 onClick={() => runCommandMutation.mutate(['npm', 'run', 'dev'])}
                 disabled={runCommandMutation.isPending}
                 data-testid="button-dev"
+                title="Run dev (Cmd/Ctrl+R)"
               >
                 <Play className="h-4 w-4 mr-2" />
                 Dev
@@ -272,6 +371,7 @@ export default function Editor() {
                 onClick={() => runCommandMutation.mutate(['npm', 'run', 'build'])}
                 disabled={runCommandMutation.isPending}
                 data-testid="button-build"
+                title="Build (Cmd/Ctrl+Shift+B)"
               >
                 <Square className="h-4 w-4 mr-2" />
                 Build
@@ -299,10 +399,39 @@ export default function Editor() {
                 size="sm"
                 onClick={() => setShowPreview(!showPreview)}
                 data-testid="button-toggle-preview"
+                title="Toggle preview (Cmd/Ctrl+P)"
               >
                 {showPreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
                 Preview
               </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowFileTree(!showFileTree)}
+                data-testid="button-toggle-filetree"
+                title="Toggle file tree (Cmd/Ctrl+B)"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowTerminal(!showTerminal)}
+                data-testid="button-toggle-terminal"
+                title="Toggle terminal (Cmd/Ctrl+J)"
+              >
+                <TerminalIcon className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowAiPanel(!showAiPanel)}
+                data-testid="button-toggle-ai"
+                title="Toggle AI panel (Cmd/Ctrl+K)"
+              >
+                <Bot className="h-4 w-4" />
+              </Button>
+              <KeyboardShortcutsDialog />
             </>
           )}
           <ThemeToggle />
@@ -404,84 +533,204 @@ export default function Editor() {
         </div>
       )}
 
-      {/* Main Editor Layout */}
-      <div className="flex-1 flex overflow-hidden flex-col md:flex-row">
-        {/* File Tree - Collapsible on mobile */}
-        <div className={`${isMobile ? 'w-full h-48' : 'w-64'} flex-shrink-0 border-b md:border-b-0 md:border-r border-border`}>
-          {!filesLoading && (
-            <FileTree
-              files={files}
-              activeFile={activeFile}
-              onFileSelect={setActiveFile}
-              onFileCreate={(path) => createFileMutation.mutate(path)}
-              onFileDelete={(path) => deleteFileMutation.mutate(path)}
-            />
-          )}
-        </div>
+      {/* Main Editor Layout with Resizable Panels */}
+      <div className="flex-1 overflow-hidden">
+        {isMobile ? (
+          // Mobile layout (non-resizable)
+          <div className="flex flex-col h-full">
+            {/* File Tree - Collapsible on mobile */}
+            {showFileTree && (
+              <div className="h-48 flex-shrink-0 border-b border-border">
+                {!filesLoading && (
+                  <FileTree
+                    files={files}
+                    activeFile={activeFile}
+                    onFileSelect={setActiveFile}
+                    onFileCreate={(path) => createFileMutation.mutate(path)}
+                    onFileDelete={(path) => deleteFileMutation.mutate(path)}
+                  />
+                )}
+              </div>
+            )}
 
-        {/* Editor & Terminal */}
-        <div className="flex-1 flex flex-col min-h-0">
-          {/* Monaco Editor */}
-          <div className={`${isMobile ? 'h-96' : 'flex-1'} bg-background`}>
-            {activeFile ? (
-              <MonacoEditor
-                value={editorContent}
-                onChange={handleEditorChange}
-                language={getLanguage(activeFile)}
-                path={activeFile}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <Settings className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p data-testid="text-no-file">Select a file to start editing</p>
+            {/* Editor */}
+            <div className="flex-1 bg-background min-h-0">
+              {activeFile ? (
+                <MonacoEditor
+                  value={editorContent}
+                  onChange={handleEditorChange}
+                  language={getLanguage(activeFile)}
+                  path={activeFile}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Settings className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                    <p data-testid="text-no-file">Select a file to start editing</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Terminal */}
+            {showTerminal && (
+              <div className="h-48 border-t border-border flex flex-col">
+                <SandboxStatus 
+                  projectId={id} 
+                  onStartDev={() => runCommandMutation.mutate(['npm', 'run', 'dev'])}
+                />
+                <div className="flex-1 min-h-0">
+                  <Terminal projectId={id} />
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Terminal - Smaller on mobile */}
-          <div className={`${isMobile ? 'h-48' : 'h-64'} border-t border-border`}>
-            <Terminal projectId={id} />
+            {/* Preview Panel - Full screen on mobile */}
+            {showPreview && (
+              <div className="fixed inset-0 z-40 bg-background">
+                <div className="h-10 border-b border-border bg-sidebar flex items-center px-3 justify-between">
+                  <h3 className="text-sm font-semibold" data-testid="text-preview">Preview</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowPreview(false)}
+                  >
+                    ✕
+                  </Button>
+                </div>
+                <iframe
+                  key={previewKey}
+                  ref={previewRef}
+                  src={`/preview/${id}`}
+                  className="w-full h-[calc(100%-2.5rem)]"
+                  title="Preview"
+                  data-testid="iframe-preview"
+                />
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          // Desktop layout with resizable panels
+          <ResizablePanelGroup direction="horizontal" className="h-full">
+            {/* File Tree Panel */}
+            {showFileTree && (
+              <>
+                <ResizablePanel defaultSize={15} minSize={10} maxSize={30}>
+                  <div className="h-full border-r border-border">
+                    {!filesLoading && (
+                      <FileTree
+                        files={files}
+                        activeFile={activeFile}
+                        onFileSelect={setActiveFile}
+                        onFileCreate={(path) => createFileMutation.mutate(path)}
+                        onFileDelete={(path) => deleteFileMutation.mutate(path)}
+                      />
+                    )}
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+              </>
+            )}
 
-        {/* AI Panel - Hidden on mobile by default */}
-        {!isMobile && (
-          <AiPanel
-            projectId={id}
-            currentFile={activeFile}
-            currentContent={editorContent}
-            onApplyPatch={(content) => {
-              setEditorContent(content)
-              setHasUnsavedChanges(true)
-              toast({ title: "Patch applied", description: "Don't forget to save!" })
-            }}
-          />
-        )}
+            {/* Main Editor & Terminal Panel */}
+            <ResizablePanel defaultSize={showFileTree ? 50 : 65} minSize={30}>
+              <ResizablePanelGroup direction="vertical">
+                {/* Monaco Editor */}
+                <ResizablePanel defaultSize={showTerminal ? 65 : 100} minSize={30}>
+                  <div className="h-full bg-background">
+                    {activeFile ? (
+                      <MonacoEditor
+                        value={editorContent}
+                        onChange={handleEditorChange}
+                        language={getLanguage(activeFile)}
+                        path={activeFile}
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-muted-foreground">
+                        <div className="text-center">
+                          <Settings className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                          <p data-testid="text-no-file">Select a file to start editing</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </ResizablePanel>
 
-        {/* Preview Panel - Responsive */}
-        {showPreview && (
-          <div className={`${isMobile ? 'fixed inset-0 z-40 bg-background' : 'w-96'} border-l border-border bg-card`}>
-            <div className="h-10 border-b border-border bg-sidebar flex items-center px-3 justify-between">
-              <h3 className="text-sm font-semibold" data-testid="text-preview">Preview</h3>
-              {isMobile && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowPreview(false)}
-                >
-                  ✕
-                </Button>
-              )}
-            </div>
-            <iframe
-              src={`/preview/${id}`}
-              className="w-full h-full"
-              title="Preview"
-              data-testid="iframe-preview"
-            />
-          </div>
+                {/* Terminal Panel */}
+                {showTerminal && (
+                  <>
+                    <ResizableHandle withHandle />
+                    <ResizablePanel defaultSize={35} minSize={15} maxSize={50}>
+                      <div className="h-full border-t border-border flex flex-col">
+                        <SandboxStatus 
+                          projectId={id} 
+                          onStartDev={() => runCommandMutation.mutate(['npm', 'run', 'dev'])}
+                        />
+                        <div className="flex-1 min-h-0">
+                          <Terminal projectId={id} />
+                        </div>
+                      </div>
+                    </ResizablePanel>
+                  </>
+                )}
+              </ResizablePanelGroup>
+            </ResizablePanel>
+
+            {/* AI Panel */}
+            {showAiPanel && (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
+                  <AiPanel
+                    projectId={id}
+                    currentFile={activeFile}
+                    currentContent={editorContent}
+                    onApplyPatch={(content) => {
+                      setEditorContent(content)
+                      setHasUnsavedChanges(true)
+                      toast({ title: "Patch applied", description: "Don't forget to save!" })
+                    }}
+                  />
+                </ResizablePanel>
+              </>
+            )}
+
+            {/* Preview Panel */}
+            {showPreview && (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={25} minSize={20} maxSize={50}>
+                  <div className="h-full border-l border-border bg-card flex flex-col">
+                    <div className="h-10 border-b border-border bg-sidebar flex items-center px-3 justify-between">
+                      <h3 className="text-sm font-semibold" data-testid="text-preview">Preview</h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPreviewKey(prev => prev + 1)}
+                        title="Refresh preview"
+                      >
+                        <RotateCw className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <SandboxStatus 
+                      projectId={id} 
+                      onStartDev={() => runCommandMutation.mutate(['npm', 'run', 'dev'])}
+                    />
+                    <div className="flex-1 relative">
+                      <iframe
+                        key={previewKey}
+                        ref={previewRef}
+                        src={`/preview/${id}`}
+                        className="w-full h-full"
+                        title="Preview"
+                        data-testid="iframe-preview"
+                      />
+                    </div>
+                  </div>
+                </ResizablePanel>
+              </>
+            )}
+          </ResizablePanelGroup>
         )}
       </div>
 

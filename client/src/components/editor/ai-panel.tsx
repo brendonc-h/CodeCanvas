@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { Sparkles, Send, Copy, RotateCw, CheckCircle } from "lucide-react"
+import { Sparkles, Send, Copy, RotateCw, CheckCircle, Code2, FileCode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { DiffViewer } from "./diff-viewer"
 import {
   Select,
   SelectContent,
@@ -18,6 +19,8 @@ import { apiRequest } from "@/lib/queryClient"
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  hasCode?: boolean
+  extractedCode?: string
 }
 
 interface AiPanelProps {
@@ -32,12 +35,20 @@ interface Model {
   label: string
 }
 
+// Extract code blocks from AI response (supports ```language ... ``` format)
+function extractCodeFromResponse(text: string): string | null {
+  const codeBlockRegex = /```(?:\w+)?\n([\s\S]*?)```/
+  const match = text.match(codeBlockRegex)
+  return match ? match[1].trim() : null
+}
+
 export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }: AiPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [model, setModel] = useState('')
   const [provider, setProvider] = useState('groq')
   const [mode, setMode] = useState<'explain' | 'refactor' | 'generate' | 'review' | 'test'>('explain')
+  const [showDiff, setShowDiff] = useState<number | null>(null)
   const { toast } = useToast()
 
   // Fetch available models for the selected provider
@@ -66,7 +77,16 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
       return res.json()
     },
     onSuccess: (data: any) => {
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
+      const extractedCode = extractCodeFromResponse(data.response)
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: data.response,
+          hasCode: !!extractedCode,
+          extractedCode: extractedCode || undefined,
+        }
+      ])
     },
     onError: (error: any) => {
       const errorMessage = error?.message || 'Unknown error occurred'
@@ -199,9 +219,21 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
                 data-testid={`message-${i}`}
               >
                 <p className="text-sm font-medium mb-1 capitalize">{msg.role}</p>
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                
+                {/* Show diff viewer if code detected and diff view is active */}
+                {msg.role === 'assistant' && msg.hasCode && showDiff === i ? (
+                  <div className="mt-2 border border-border rounded-md overflow-hidden" style={{ maxHeight: '300px' }}>
+                    <DiffViewer
+                      original={currentContent}
+                      modified={msg.extractedCode || ''}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                )}
+                
                 {msg.role === 'assistant' && (
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2 mt-2 flex-wrap">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -211,15 +243,32 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
                       <Copy className="h-3 w-3 mr-1" />
                       Copy
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onApplyPatch(msg.content)}
-                      data-testid={`button-apply-${i}`}
-                    >
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Apply
-                    </Button>
+                    {msg.hasCode && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowDiff(showDiff === i ? null : i)}
+                          data-testid={`button-toggle-diff-${i}`}
+                        >
+                          <Code2 className="h-3 w-3 mr-1" />
+                          {showDiff === i ? 'Hide Diff' : 'View Diff'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (msg.extractedCode) {
+                              onApplyPatch(msg.extractedCode)
+                            }
+                          }}
+                          data-testid={`button-apply-${i}`}
+                        >
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Apply Code
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
