@@ -39,10 +39,14 @@ export default function AuthPage() {
   });
 
   const loginMutation = useMutation({
-    mutationFn: (data: z.infer<typeof loginSchema>) => apiRequest("POST", "/api/auth/login", data),
+    mutationFn: async (data: z.infer<typeof loginSchema>) => {
+      const res = await apiRequest("POST", "/api/auth/login", data);
+      return res.json();
+    },
     onSuccess: () => {
       toast({ title: "Welcome back!" });
-      setLocation("/");
+      // Force a page reload to ensure session is properly set
+      window.location.href = "/";
     },
     onError: (error: any) => {
       toast({ title: "Login failed", description: error.message, variant: "destructive" });
@@ -50,10 +54,14 @@ export default function AuthPage() {
   });
 
   const signupMutation = useMutation({
-    mutationFn: (data: z.infer<typeof signupSchema>) => apiRequest("POST", "/api/auth/signup", data),
+    mutationFn: async (data: z.infer<typeof signupSchema>) => {
+      const res = await apiRequest("POST", "/api/auth/signup", data);
+      return res.json();
+    },
     onSuccess: () => {
-      toast({ title: "Account created!" });
-      setLocation("/");
+      toast({ title: "Account created! Logging you in..." });
+      // Force a page reload to ensure session is properly set
+      window.location.href = "/";
     },
     onError: (error: any) => {
       toast({ title: "Signup failed", description: error.message, variant: "destructive" });
@@ -64,7 +72,10 @@ export default function AuthPage() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">🎨 CodeCanvas</CardTitle>
+          <div className="flex items-center justify-center mb-4">
+            <img src="/logo.png" alt="CurryStack" className="h-16 w-16" />
+          </div>
+          <CardTitle className="text-3xl font-bold">CurryStack</CardTitle>
           <CardDescription>Professional Web IDE - Sign in or create your account</CardDescription>
         </CardHeader>
         <CardContent>

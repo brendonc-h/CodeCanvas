@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useState, useEffect } from "react"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { Sparkles, Send, Copy, RotateCw, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -27,30 +27,65 @@ interface AiPanelProps {
   onApplyPatch: (content: string) => void
 }
 
-const models = [
-  { value: 'qwen2.5-coder:7b', label: 'Qwen2.5-Coder 7B' },
-  { value: 'codellama:7b', label: 'CodeLlama 7B' },
-  { value: 'deepseek-coder:6.7b', label: 'DeepSeek Coder 6.7B' },
-]
+interface Model {
+  value: string
+  label: string
+}
 
 export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }: AiPanelProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('qwen2.5-coder:7b')
-  const [mode, setMode] = useState<'explain' | 'refactor' | 'generate'>('explain')
+  const [model, setModel] = useState('')
+  const [provider, setProvider] = useState('groq')
+  const [mode, setMode] = useState<'explain' | 'refactor' | 'generate' | 'review' | 'test'>('explain')
   const { toast } = useToast()
 
+  // Fetch available models for the selected provider
+  const { data: modelsData, isLoading: modelsLoading } = useQuery<{ models: Model[] }>({
+    queryKey: ['ai-models', provider],
+    queryFn: () => apiRequest('GET', `/api/ai/models?provider=${provider}`).then(res => res.json()),
+    enabled: !!provider,
+  })
+
+  const models: Model[] = modelsData?.models || []
+
+  // Set default model when models load
+  useEffect(() => {
+    if (models.length > 0 && !model) {
+      setModel(models[0].value)
+    }
+  }, [models, model])
+
   const aiMutation = useMutation({
-    mutationFn: async (data: { prompt: string; model: string; filePath?: string; content?: string }) => {
-      return apiRequest('POST', '/api/ai/complete', data)
+    mutationFn: async (data: { prompt: string; model: string; provider?: string; filePath?: string; content?: string }) => {
+      const res = await apiRequest('POST', '/api/ai/complete', {
+        ...data,
+        provider,
+        projectId,
+      })
+      return res.json()
     },
     onSuccess: (data: any) => {
       setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
     },
-    onError: () => {
+    onError: (error: any) => {
+      const errorMessage = error?.message || 'Unknown error occurred'
+      let description = "Failed to get AI response."
+
+      // Handle provider-specific errors
+      if (errorMessage.includes('API key')) {
+        description = "Invalid or missing API key for this provider."
+      } else if (errorMessage.includes('rate limit')) {
+        description = "Rate limit exceeded. Please try again later."
+      } else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+        description = "Network error. Check your connection and try again."
+      } else if (errorMessage.includes('model not found')) {
+        description = "Selected model is not available. Try a different model."
+      }
+
       toast({
         title: "AI Error",
-        description: "Failed to get AI response. Make sure Ollama is running.",
+        description,
         variant: "destructive",
       })
     },
@@ -63,15 +98,31 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
     setMessages(prev => [...prev, { role: 'user', content: userMessage }])
     setInput('')
 
-    const prompt = mode === 'explain' 
-      ? `Explain this code:\n\n${currentContent}\n\nQuestion: ${userMessage}`
-      : mode === 'refactor'
-      ? `Refactor this code:\n\n${currentContent}\n\nRequirements: ${userMessage}`
-      : `Generate code: ${userMessage}`
+    let prompt = userMessage
+
+    // Build prompt based on mode
+    switch (mode) {
+      case 'explain':
+        prompt = `Explain this code:\n\n${currentContent}\n\nQuestion: ${userMessage}`
+        break
+      case 'refactor':
+        prompt = `Refactor this code:\n\n${currentContent}\n\nRequirements: ${userMessage}`
+        break
+      case 'generate':
+        prompt = `Generate code: ${userMessage}`
+        break
+      case 'review':
+        prompt = `Review this code for bugs, performance issues, and best practices:\n\n${currentContent}\n\nAdditional feedback: ${userMessage}`
+        break
+      case 'test':
+        prompt = `Generate unit tests for this code:\n\n${currentContent}\n\nRequirements: ${userMessage}`
+        break
+    }
 
     aiMutation.mutate({
       prompt,
       model,
+      provider,
       filePath: currentFile || undefined,
       content: currentContent || undefined,
     })
@@ -90,9 +141,23 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
           <h3 className="text-sm font-semibold" data-testid="text-ai-assistant">AI Assistant</h3>
         </div>
         
-        <Select value={model} onValueChange={setModel}>
+        {/* Provider Selection */}
+        <Select value={provider} onValueChange={setProvider}>
+          <SelectTrigger className="mb-3" data-testid="select-provider">
+            <SelectValue placeholder="Select provider" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="groq" data-testid="provider-groq">Groq (Free & Fast)</SelectItem>
+            <SelectItem value="openai" data-testid="provider-openai">OpenAI</SelectItem>
+            <SelectItem value="anthropic" data-testid="provider-anthropic">Anthropic</SelectItem>
+            <SelectItem value="grok" data-testid="provider-grok">Grok</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Model Selection */}
+        <Select value={model} onValueChange={setModel} disabled={modelsLoading}>
           <SelectTrigger data-testid="select-model">
-            <SelectValue placeholder="Select model" />
+            <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select model"} />
           </SelectTrigger>
           <SelectContent>
             {models.map(m => (
@@ -103,11 +168,14 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
           </SelectContent>
         </Select>
 
+        {/* Mode Tabs */}
         <Tabs value={mode} onValueChange={(v) => setMode(v as any)} className="mt-3">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="explain" data-testid="tab-explain">Explain</TabsTrigger>
             <TabsTrigger value="refactor" data-testid="tab-refactor">Refactor</TabsTrigger>
             <TabsTrigger value="generate" data-testid="tab-generate">Generate</TabsTrigger>
+            <TabsTrigger value="review" data-testid="tab-review">Review</TabsTrigger>
+            <TabsTrigger value="test" data-testid="tab-test">Test</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -168,7 +236,11 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
                 ? 'Ask about the code...'
                 : mode === 'refactor'
                 ? 'How should we refactor?'
-                : 'What should we generate?'
+                : mode === 'generate'
+                ? 'What should we generate?'
+                : mode === 'review'
+                ? 'Additional review requirements...'
+                : 'Test requirements...'
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -100,19 +100,23 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="h-14 border-b border-border bg-sidebar flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <Code2 className="h-6 w-6 text-primary" />
-          <h1 className="text-lg font-semibold" data-testid="text-app-title">Web IDE</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-new-project">
-                <Plus className="h-4 w-4 mr-2" />
-                New Project
-              </Button>
-            </DialogTrigger>
+      <header className="border-b border-border bg-card px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="CurryStack" className="h-10 w-10" />
+            <div>
+              <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">CurryStack</h1>
+              <p className="text-sm text-muted-foreground">Professional Web IDE</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-new-project">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Project
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle className="text-xl">Create New Project</DialogTitle>
@@ -173,8 +177,9 @@ export default function Dashboard() {
                 </Button>
               </div>
             </DialogContent>
-          </Dialog>
-          <ThemeToggle />
+            </Dialog>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

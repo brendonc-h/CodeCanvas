@@ -1,11 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { createClient } from '@supabase/supabase-js';
 import { dbStorage } from './db-storage';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Add user to request
 declare global {
@@ -50,29 +44,15 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 // Optional auth - sets user if authenticated but doesn't require it
 export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      return next();
-    }
-
-    const token = authHeader.substring(7);
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (!error && user) {
-      let dbUser = await dbStorage.getUserByEmail(user.email!);
-      if (!dbUser) {
-        const username = user.email!.split('@')[0];
-        dbUser = await dbStorage.createUser({
-          email: user.email!,
-          username,
-        });
+    if (req.session?.userId) {
+      const dbUser = await dbStorage.getUserById(req.session.userId);
+      if (dbUser) {
+        req.user = {
+          id: dbUser.id,
+          email: dbUser.email,
+          username: dbUser.username,
+        };
       }
-
-      req.user = {
-        id: dbUser.id,
-        email: dbUser.email,
-        username: dbUser.username,
-      };
     }
   } catch (error) {
     // Ignore auth errors for optional auth
