@@ -199,6 +199,15 @@ fly deploy
 ### Free Limits:
 - **14,400 requests/day** (600/hour)
 - **Very fast** (100+ tokens/second)
+
+## Netlify (SPA) note
+
+If you're deploying the client as a single-page app on Netlify, deep links (for example, /editor/project/123) can return a 404 unless Netlify is configured to serve your `index.html` for all routes. This project includes two ways to configure that fallback:
+
+- `netlify.toml` at the repository root (already added). It sets `dist/public` as the publish directory and a redirect rule that points `/*` to `/index.html`.
+- `_redirects` in `client/public/_redirects` which is copied to `dist/public/_redirects` during the Vite build. The file contains: `/* /index.html 200`.
+
+If you prefer to customize the behavior (for example, adding header rules or excluding API paths), edit `netlify.toml` or `client/public/_redirects` before running `npm run build` and redeploy.
 - **Models**: Llama 3, Mixtral, Gemma
 
 **Perfect for a free tier!**
