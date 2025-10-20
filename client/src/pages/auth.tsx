@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Code2 } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -73,10 +74,8 @@ export default function AuthPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center mb-4">
-            <img src="/logo.png" alt="CurryStack" className="h-16 w-16" />
+            <img src="/logo2.png" alt="CurryStack" className="h-24 w-24" />
           </div>
-          <CardTitle className="text-3xl font-bold">CurryStack</CardTitle>
-          <CardDescription>Professional Web IDE - Sign in or create your account</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "login" | "signup")}>

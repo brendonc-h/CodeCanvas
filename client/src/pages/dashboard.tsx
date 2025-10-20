@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { useQuery, useMutation } from "@tanstack/react-query"
-import { Link } from "wouter"
-import { Plus, Folder, Trash2, Code2, FileCode } from "lucide-react"
+import { useLocation, Link } from "wouter"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { Plus, Trash2, Code, Eye, LogOut, Code2, Folder, FileCode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -103,10 +103,8 @@ export default function Dashboard() {
       <header className="border-b border-border bg-card px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="CurryStack" className="h-10 w-10" />
+            <img src="/logo2.png" alt="CurryStack" className="h-24 w-24" />
             <div>
-              <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">CurryStack</h1>
-              <p className="text-sm text-muted-foreground">Professional Web IDE</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
