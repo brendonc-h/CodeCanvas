@@ -171,6 +171,7 @@ export function AiPanel({ projectId, currentFile, currentContent, onApplyPatch }
             <SelectItem value="openai" data-testid="provider-openai">OpenAI</SelectItem>
             <SelectItem value="anthropic" data-testid="provider-anthropic">Anthropic</SelectItem>
             <SelectItem value="grok" data-testid="provider-grok">Grok</SelectItem>
+            <SelectItem value="minimax" data-testid="provider-minimax">MiniMax (HF)</SelectItem>
           </SelectContent>
         </Select>
 

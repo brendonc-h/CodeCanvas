@@ -12,6 +12,7 @@ import {
   Settings,
   History,
   Keyboard,
+  Key,
   Smartphone,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,8 @@ export default function Editor() {
   const [showAiPanel, setShowAiPanel] = useState(true)
   const [showTerminal, setShowTerminal] = useState(true)
   const [previewKey, setPreviewKey] = useState(0)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [minimaxKey, setMinimaxKey] = useState('')
   const previewRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -88,6 +91,18 @@ export default function Editor() {
   })
 
   const activeFileData = files.find(f => f.path === activeFile)
+
+  const { data: settings } = useQuery<Array<{ key: string; value: string }>>({
+    queryKey: ['/api/settings'],
+    enabled: settingsOpen,
+  })
+
+  useEffect(() => {
+    if (settings) {
+      const mmKey = settings.find(s => s.key === 'minimax_api_key')
+      setMinimaxKey(mmKey?.value || '')
+    }
+  }, [settings])
 
   useEffect(() => {
     if (activeFileData) {
@@ -203,6 +218,16 @@ export default function Editor() {
         title: "Rollback started",
         description: "Redeploying previous version...",
       })
+    },
+  })
+
+  const saveSettingMutation = useMutation({
+    mutationFn: async (data: { key: string; value: string }) => {
+      return apiRequest('POST', '/api/settings', data)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings'] })
+      toast({ title: "Settings saved" })
     },
   })
 
@@ -432,6 +457,15 @@ export default function Editor() {
                 <Bot className="h-4 w-4" />
               </Button>
               <KeyboardShortcutsDialog />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSettingsOpen(true)}
+                title="Settings"
+                data-testid="button-settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
             </>
           )}
           <ThemeToggle />
@@ -840,6 +874,53 @@ export default function Editor() {
                 </div>
               ))
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Settings</DialogTitle>
+            <DialogDescription>
+              Configure your MiniMax API key
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="minimax-key">
+                <Key className="h-4 w-4 inline mr-2" />
+                MiniMax API Key
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="minimax-key"
+                  type="password"
+                  placeholder="mm_..."
+                  value={minimaxKey}
+                  onChange={(e) => setMinimaxKey(e.target.value)}
+                />
+                <Button
+                  onClick={() => saveSettingMutation.mutate({ key: 'minimax_api_key', value: minimaxKey })}
+                  disabled={saveSettingMutation.isPending}
+                >
+                  <Save className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Get your free key at{' '}
+                <a
+                  href="https://platform.minimax.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  platform.minimax.io
+                </a>
+                {' '}(Free for limited time)
+              </p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

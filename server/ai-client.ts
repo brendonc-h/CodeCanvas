@@ -2,7 +2,7 @@ import axios from 'axios';
 import { dbStorage } from './db-storage';
 
 export interface AIRequest {
-  provider: 'groq' | 'openai' | 'anthropic' | 'grok';
+  provider: 'groq' | 'openai' | 'anthropic' | 'grok' | 'minimax';
   model: string;
   prompt: string;
   apiKey?: string; // For external providers
@@ -33,6 +33,11 @@ export class AIClient {
           const grokKey = apiKey || (await this.getUserApiKey(userId, 'grok_api_key')) || process.env.GROK_API_KEY;
           if (!grokKey) throw new Error('Grok API key not configured');
           return await this.generateGrok(model, prompt, grokKey);
+
+        case 'minimax':
+          const minimaxKey = apiKey || (await this.getUserApiKey(userId, 'minimax_api_key')) || process.env.MINIMAX_API_KEY;
+          if (!minimaxKey) throw new Error('MiniMax API key not configured');
+          return await this.generateMiniMax(model, prompt, minimaxKey);
 
         default:
           throw new Error(`Unsupported provider: ${provider}`);
@@ -122,6 +127,36 @@ export class AIClient {
     return response.data.choices[0].message.content;
   }
 
+  private async generateMiniMax(model: string, prompt: string, apiKey: string): Promise<string> {
+    // MiniMax uses OpenAI-compatible API
+    const response = await axios.post(
+      'https://api.minimax.io/v1/chat/completions',
+      {
+        model: model || 'MiniMax-M2',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.7,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 60000,
+      }
+    );
+    
+    // Debug logging
+    console.log('MiniMax response:', JSON.stringify(response.data, null, 2));
+    
+    // Handle response
+    if (!response.data || !response.data.choices || !response.data.choices[0]) {
+      throw new Error(`Invalid MiniMax response format: ${JSON.stringify(response.data)}`);
+    }
+    
+    return response.data.choices[0].message.content;
+  }
+
   private async getUserApiKey(userId: string, keyName: string): Promise<string | null> {
     const setting = await dbStorage.getUserSetting(userId, keyName);
     return setting?.value || null;
@@ -151,6 +186,9 @@ export class AIClient {
         case 'grok':
           // Return available Grok models
           return ['grok-beta', 'grok-vision-beta'];
+
+        case 'minimax':
+          return ['MiniMax-M2'];
 
         default:
           return [];
@@ -200,6 +238,19 @@ export class AIClient {
           try {
             await axios.get('https://api.x.ai/v1/models', {
               headers: { 'Authorization': `Bearer ${grokKey}` },
+              timeout: 5000,
+            });
+            return true;
+          } catch (error) {
+            return false;
+          }
+
+        case 'minimax':
+          const minimaxKey = (userId ? await this.getUserApiKey(userId, 'minimax_api_key') : null) || process.env.MINIMAX_API_KEY;
+          if (!minimaxKey) return false;
+          try {
+            await axios.get('https://api.minimax.io/v1/models', {
+              headers: { 'Authorization': `Bearer ${minimaxKey}` },
               timeout: 5000,
             });
             return true;

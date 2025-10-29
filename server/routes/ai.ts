@@ -10,9 +10,9 @@ const router = Router();
 router.get("/models", requireAuth, async (req, res) => {
   try {
     const { provider } = req.query;
-    const supportedProviders = ['groq', 'openai', 'anthropic', 'grok'];
+    const supportedProviders = ['groq', 'openai', 'anthropic', 'grok', 'minimax'];
     if (!provider || typeof provider !== 'string' || !supportedProviders.includes(provider)) {
-      return res.status(400).json({ error: "Invalid provider. Supported: groq, openai, anthropic, grok" });
+      return res.status(400).json({ error: "Invalid provider. Supported: groq, openai, anthropic, grok, minimax" });
     }
 
     const models = await aiClient.listModels(provider, req.user!.id);
@@ -30,9 +30,9 @@ router.get("/models", requireAuth, async (req, res) => {
 router.get("/health", requireAuth, async (req, res) => {
   try {
     const { provider } = req.query;
-    const supportedProviders = ['groq', 'openai', 'anthropic', 'grok'];
+    const supportedProviders = ['groq', 'openai', 'anthropic', 'grok', 'minimax'];
     if (!provider || typeof provider !== 'string' || !supportedProviders.includes(provider)) {
-      return res.status(400).json({ error: "Invalid provider. Supported: groq, openai, anthropic, grok" });
+      return res.status(400).json({ error: "Invalid provider. Supported: groq, openai, anthropic, grok, minimax" });
     }
 
     const healthy = await aiClient.checkProviderHealth(provider, req.user!.id);
@@ -46,10 +46,10 @@ router.get("/health", requireAuth, async (req, res) => {
 router.post("/complete", requireAuth, async (req, res) => {
   try {
     const { provider = 'groq', model, prompt, projectId, filePath, apiKey } = req.body;
-    const supportedProviders = ['groq', 'openai', 'anthropic', 'grok'];
+    const supportedProviders = ['groq', 'openai', 'anthropic', 'grok', 'minimax'];
 
     if (!supportedProviders.includes(provider)) {
-      return res.status(400).json({ error: "Invalid provider. Supported: groq, openai, anthropic, grok" });
+      return res.status(400).json({ error: "Invalid provider. Supported: groq, openai, anthropic, grok, minimax" });
     }
 
     if (!model || !prompt) {

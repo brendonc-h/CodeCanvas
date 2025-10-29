@@ -12,14 +12,14 @@ A production-grade web-based IDE with AI assistance (Groq, OpenAI, Grok, Claude)
 - **File Tree**: Hierarchical file navigation with create, delete, and context menu operations
 - **Interactive Terminal**: Real-time terminal access to Docker containers via WebSocket (xterm.js)
 - **Live Preview**: Auto-detect dev server ports and preview running applications
-- **AI Code Assistant**: Multi-model support (Groq/Llama 3.3 70B, OpenAI GPT-4, Grok, Claude) for code explanation, refactoring, and generation
+- **AI Code Assistant**: Multi-model support (Groq/Llama 3.3 70B, OpenAI GPT-4, Grok, Claude, MiniMax M2) for code explanation, refactoring, and generation
 - **Netlify Deployment**: One-click deployment of static sites and SPAs to Netlify
 
 ### Technical Architecture
 - **Frontend**: React + TypeScript + Monaco Editor + xterm.js + Tailwind CSS
 - **Backend**: Express + TypeScript + WebSocket (ws)
 - **Sandboxing**: Docker containers with resource limits (0.5 CPU, 512MB RAM, 256 PIDs)
-- **AI**: Groq (FREE cloud API), OpenAI, Grok, Claude
+- **AI**: Groq (FREE cloud API), OpenAI, Grok, Claude, MiniMax (FREE for limited time)
 - **Deployment**: Netlify API integration
 - **Storage**: In-memory with file system persistence
 
@@ -65,6 +65,33 @@ npm run dev
 
 The application will be available at `http://localhost:5000`
 
+### 4. Configure AI Providers (Optional)
+
+To use MiniMax or other AI providers, configure your API keys:
+
+**Option 1: Environment Variables**
+```bash
+# Add to your .env file
+MINIMAX_API_KEY=mm_...      # For MiniMax (free for limited time)
+GROQ_API_KEY=gsk_...        # For Groq (free)
+OPENAI_API_KEY=sk-...       # For OpenAI
+ANTHROPIC_API_KEY=sk-ant-... # For Anthropic
+GROK_API_KEY=xai-...        # For Grok
+```
+
+**Option 2: In-App Settings**
+1. Open any project in the editor
+2. Click the Settings button (⚙️) in the toolbar
+3. Enter your MiniMax API key
+4. Click Save
+
+**Getting API Keys:**
+- **MiniMax** (FREE for limited time): https://platform.minimax.io
+- **Groq** (FREE): https://console.groq.com/keys
+- **OpenAI**: https://platform.openai.com/api-keys
+- **Anthropic**: https://console.anthropic.com/settings/keys
+- **Grok**: https://console.x.ai
+
 ## Usage Guide
 
 ### Creating a Project
@@ -97,10 +124,12 @@ The application will be available at `http://localhost:5000`
 - Auto-connects when sandbox is created
 
 **AI Assistant:**
-- Select a model (Qwen2.5-Coder recommended)
-- Choose mode: Explain, Refactor, or Generate
+- Select a provider (Groq, OpenAI, Anthropic, Grok, or MiniMax)
+- Select a model from the available options
+- Choose mode: Explain, Refactor, Generate, Review, or Test
 - Type your question or requirement
 - Click "Apply" to insert AI-generated code into the editor
+- Configure API keys via the Settings button (⚙️) in the toolbar
 
 **Preview:**
 - Toggle preview panel with the Preview button
@@ -162,7 +191,14 @@ The application will be available at `http://localhost:5000`
 - `WS /ws/terminal/:projectId` - Interactive terminal WebSocket
 
 ### AI
+- `GET /api/ai/models?provider={provider}` - List available models for a provider
+- `GET /api/ai/health?provider={provider}` - Check provider health status
 - `POST /api/ai/complete` - Get AI code completion
+
+### Settings
+- `GET /api/settings` - Get user settings
+- `POST /api/settings` - Save user setting
+- `DELETE /api/settings/:key` - Delete user setting
 
 ### Deployment
 - `POST /api/deploy/netlify` - Deploy to Netlify
